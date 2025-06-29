@@ -1,0 +1,19 @@
+name: Invalid workflow example
+
+on:
+  workflow_dispatch:
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      models: read
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Invalid Step
+        runn: echo "This is invalid because 'run' is misspelled as 'runn'"
