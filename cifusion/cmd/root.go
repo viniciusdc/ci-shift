@@ -53,7 +53,9 @@ var validateCmd = &cobra.Command{
 
 func Execute() error {
 	validateCmd.Flags().StringVar(&provider, "provider", "", "CI provider (github, circleci, gitlab)")
-	validateCmd.MarkFlagRequired("provider")
+	if err := validateCmd.MarkFlagRequired("provider"); err != nil {
+		return err
+	}
 	rootCmd.AddCommand(validateCmd)
 	return rootCmd.Execute()
 }
