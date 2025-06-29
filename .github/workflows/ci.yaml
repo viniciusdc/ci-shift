@@ -12,9 +12,6 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cifusion
     steps:
       - uses: actions/checkout@v4
 
@@ -29,21 +26,20 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('cifusion/go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 
       - name: Build
         run: make build
+        working-directory: cifusion
 
       - name: Test
         run: make test
+        working-directory: cifusion
 
   lint:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cifusion
     steps:
       - uses: actions/checkout@v4
 
