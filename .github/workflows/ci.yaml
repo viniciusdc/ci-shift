@@ -36,6 +36,9 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Add to path
+        run: make install
+
       - name: Test
         run: make test
 
