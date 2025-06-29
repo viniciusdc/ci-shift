@@ -12,6 +12,9 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cifusion
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +22,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('cifusion/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Build
         run: make build
@@ -26,29 +39,11 @@ jobs:
       - name: Test
         run: make test
 
-  detect-modules:
-    runs-on: ubuntu-latest
-    outputs:
-      modules: ${{ steps.set-modules.outputs.modules }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - id: set-modules
-        run: |
-          MODULE_DIRS=$(go list -f '{{.Dir}}' -m all | jq -R -s -c 'split("\n")[:-1]')
-          echo "modules=$MODULE_DIRS" >> $GITHUB_OUTPUT
-
   lint:
-    needs: detect-modules
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
+    defaults:
+      run:
+        working-directory: cifusion
     steps:
       - uses: actions/checkout@v4
 
@@ -61,4 +56,4 @@ jobs:
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
-          working-directory: ${{ matrix.modules }}
+          working-directory: cifusion
