@@ -6,8 +6,11 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  setup:
     runs-on: ubuntu-latest
+
+    outputs:
+      go-version: "1.22"
 
     steps:
       - uses: actions/checkout@v4
@@ -17,19 +20,70 @@ jobs:
         with:
           go-version: 1.22
 
-      - name: Install golangci-lint
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install tools
+        run: make install-tools
 
       - name: Install dependencies
         run: go mod tidy
         working-directory: cifusion
 
-      - name: Build
-        run: make build
+  lint:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Lint
         run: make lint
+
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build
+        run: make build
 
       - name: Test
         run: make test
