@@ -196,3 +196,9 @@ the release workflow runs the tests and publishes binaries with GoReleaser.
 Adding a provider means implementing `ir.Provider` (`Parse`, `Emit`,
 `Detect`) in `providers/<name>`, registering it in `convert/convert.go`,
 and adding its schema URL to `schema/schema.go`.
+
+## License
+
+ci-shift is licensed under the [Apache License 2.0](LICENSE). The provider
+schemas embedded in `schema/snapshots/` keep their upstream licenses; see
+[NOTICE](NOTICE).

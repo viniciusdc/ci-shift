@@ -1,0 +1,25 @@
+ci-shift
+Copyright 2026 Vinicius Cerutti
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This product embeds the CI/CD configuration schemas published by each
+provider, as snapshots in schema/snapshots/. They are included unmodified
+and remain under their original licenses:
+
+- github.json: GitHub workflow schema from SchemaStore
+  (https://github.com/SchemaStore/schemastore), licensed under the Apache
+  License, Version 2.0.
+- circleci.json: CircleCI config schema from circleci-yaml-language-server
+  (https://github.com/CircleCI-Public/circleci-yaml-language-server),
+  Copyright CircleCI, licensed under the Apache License, Version 2.0.
+- gitlab.json: GitLab CI/CD schema from GitLab
+  (https://gitlab.com/gitlab-org/gitlab), Copyright (c) 2011-present GitLab
+  Inc., licensed under the MIT License.
+- azure.json: Azure Pipelines schema from azure-pipelines-vscode
+  (https://github.com/microsoft/azure-pipelines-vscode), Copyright (c)
+  Microsoft Corporation, licensed under the MIT License.
+- bitbucket.json: Bitbucket Pipelines schema published by Atlassian at
+  https://api.bitbucket.org/schemas/pipelines-configuration.
+
+The MIT license texts are reproduced in schema/snapshots/THIRD_PARTY_LICENSES.md.
