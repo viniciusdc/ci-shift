@@ -48,9 +48,29 @@ func TestPostProcess(t *testing.T) {
 }
 
 func TestStampChangesWithContent(t *testing.T) {
-	a := stampFor("id", "one", "f.txtar", true, 760)
-	b := stampFor("id", "two", "f.txtar", true, 760)
-	if a == b || !strings.HasPrefix(a, stampPrefix) {
-		t.Errorf("stamps %q and %q", a, b)
+	a := stampFor("id", "console", "one", "f.txtar", true, 760)
+	b := stampFor("id", "console", "two", "f.txtar", true, 760)
+	c := stampFor("id", "bash", "one", "f.txtar", true, 760)
+	if a == b || a == c || !strings.HasPrefix(a, stampPrefix) {
+		t.Errorf("stamps %q, %q and %q", a, b, c)
+	}
+}
+
+func TestColorSession(t *testing.T) {
+	got := colorSession("$ hello greet Ada\n# Hi, Ada!\n\n$ hello count", true)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 4 || lines[2] != "" {
+		t.Fatalf("line structure changed: %q", lines)
+	}
+	cmd := "\x1b[38;2;139;148;158m$ \x1b[38;2;230;237;243mhello greet Ada\x1b[0m"
+	if lines[0] != cmd {
+		t.Errorf("command line = %q, want %q", lines[0], cmd)
+	}
+	// Output starting with "#" is still output, not a command.
+	if lines[1] != "\x1b[38;2;139;148;158m# Hi, Ada!\x1b[0m" {
+		t.Errorf("output line = %q", lines[1])
+	}
+	if light := colorSession("$ x", false); !strings.Contains(light, "31;35;40") {
+		t.Errorf("light theme command color missing: %q", light)
 	}
 }

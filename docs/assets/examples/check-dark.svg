@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
 <svg width="760.00" height="237.00" xmlns="http://www.w3.org/2000/svg">
-<!-- docsmith:sha256:1194db5d79450e98 -->
+<!-- docsmith:sha256:303f68b6d942abf8 -->
 <style>
 @font-face {
 	font-family: &apos;JetBrains Mono&apos;;
@@ -11,14 +11,7 @@
 }
 </style><rect width="760.00" height="237.00" fill="#161b22" rx="8.00" ry="8.00" x="0.00px" y="0.00px"/><rect x="0.00" y="0.00" width="760.00" height="24.00" rx="8.00" ry="8.00" fill="#21262d"/><rect x="0.00" y="16.00" width="760.00" height="8.00" fill="#21262d"/><line x1="0.00" y1="24.00" x2="760.00" y2="24.00" stroke="#30363d" stroke-width="0.50"/>
 <g font-family="JetBrains Mono" font-size="14.00px" fill="#e6edf3" clip-path="url(#terminalMask)">
-<text x="20.00px" y="51.80px" xml:space="preserve">cishift check .gitlab-ci.yml broken.yml --provider gitlab
-</text><text x="20.00px" y="68.60px" xml:space="preserve"><tspan fill="#8b949e" font-style="italic"># .gitlab-ci.yml: valid GitLab CI/CD configuration</tspan>
-</text><text x="20.00px" y="85.40px" xml:space="preserve"><tspan fill="#8b949e" font-style="italic"># broken.yml: invalid GitLab CI/CD configuration</tspan>
-</text><text x="20.00px" y="102.20px" xml:space="preserve"><tspan fill="#8b949e" font-style="italic">#   - /test/when: value must be one of &apos;on_success&apos;, &apos;on_failure&apos;, &apos;always&apos;, &apos;never&apos;,</tspan>
-</text><text x="20.00px" y="119.00px" xml:space="preserve"><tspan fill="#8b949e" font-style="italic">#     &apos;manual&apos;, &apos;delayed&apos;</tspan>
-</text><text x="20.00px" y="135.80px" xml:space="preserve">
-</text><text x="20.00px" y="152.60px" xml:space="preserve">echo <tspan fill="#79c0ff">$?</tspan>
-</text><text x="20.00px" y="169.40px" xml:space="preserve"><tspan fill="#8b949e" font-style="italic"># 1</tspan></text>
+<text x="20.00px" y="51.80px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">$ </tspan><tspan xml:space="preserve" fill="#e6edf3">cishift check .gitlab-ci.yml broken.yml --provider gitlab</tspan><tspan xml:space="preserve"/></text><text x="20.00px" y="68.60px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">.gitlab-ci.yml: valid GitLab CI/CD configuration</tspan><tspan xml:space="preserve"/></text><text x="20.00px" y="85.40px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">broken.yml: invalid GitLab CI/CD configuration</tspan><tspan xml:space="preserve"/></text><text x="20.00px" y="102.20px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">  - /test/when: value must be one of &apos;on_success&apos;, &apos;on_failure&apos;, &apos;always&apos;, &apos;never&apos;,</tspan><tspan xml:space="preserve"/></text><text x="20.00px" y="119.00px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">    &apos;manual&apos;, &apos;delayed&apos;</tspan><tspan xml:space="preserve"/></text><text x="20.00px" y="135.80px" xml:space="preserve"/><text x="20.00px" y="152.60px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">$ </tspan><tspan xml:space="preserve" fill="#e6edf3">echo $?</tspan><tspan xml:space="preserve"/></text><text x="20.00px" y="169.40px" xml:space="preserve"><tspan xml:space="preserve" fill="#8b949e">1</tspan><tspan xml:space="preserve"/></text>
 </g>
 <svg x="0.00px" y="0.00px"><circle cx="13.50" cy="12.00" r="5.50" fill="#FF5A54"/><circle cx="32.50" cy="12.00" r="5.50" fill="#E6BF29"/><circle cx="51.50" cy="12.00" r="5.50" fill="#52C12B"/><text x="380.00" y="12.00" font-family="JetBrains Mono" font-size="11" fill="#8b949e" text-anchor="middle" dominant-baseline="central">check</text></svg><defs><clipPath id="terminalMask"><rect x="0.00" y="0.00" width="760.00" height="181.00"/></clipPath></defs>
 <line x1="12.00" y1="201.00" x2="748.00" y2="201.00" stroke="#30363d" stroke-width="0.50"/>
