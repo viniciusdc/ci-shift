@@ -64,18 +64,19 @@ Give a file and a target; the source provider is detected:
 </div>
 <!-- /gendocs:example:convert-gitlab-to-github -->
 
-```bash
-# Write the result to a file (and record it in .cishift.lock)
-cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
+`-o` writes the result to a file (and records it in `.cishift.lock`),
+`--check` validates it against the target schema, and `-` reads from stdin
+when you name the source with `--from`:
 
-# Check the result against the target schema; fail on lossy conversions
-cishift .circleci/config.yml --to azure --check --strict
-
-# Read from stdin
-cat bitbucket-pipelines.yml | cishift - --from bitbucket --to gitlab
-
-cishift providers
-```
+<!-- gendocs:example:more-conversions -->
+<div align="center">
+<a href="testdata/examples/more-conversions.txtar"><picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/examples/more-conversions-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/examples/more-conversions-light.svg">
+  <img src="docs/assets/examples/more-conversions-dark.svg" alt="cishift more conversions example" />
+</picture></a>
+</div>
+<!-- /gendocs:example:more-conversions -->
 
 `cishift convert <file> --to <provider>` and `cishift validate` still work
 as aliases, for scripts that prefer explicit verbs.
@@ -117,10 +118,9 @@ invalid:
 </div>
 <!-- /gendocs:example:check -->
 
-```bash
-cishift check .github/workflows/*.yml
-cishift check --latest .gitlab-ci.yml   # download the newest schemas first
-```
+It takes any number of files, so `cishift check .github/workflows/*.yml`
+checks a whole directory, and `--latest` downloads the newest schemas
+first (see [Schemas](#schemas)).
 
 `cishift detect` prints which provider a file is for, whatever its name:
 

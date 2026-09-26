@@ -1,0 +1,69 @@
+# doc:id     more-conversions
+# doc:file   README.md
+# doc:tested true
+
+# Stop the lockfile search here, as the root of a repository would.
+mkdir .git
+
+# Check the result against the target schema and write it to a file.
+# Info notes are not warnings, so --strict still passes.
+exec cishift .circleci/config.yml --to azure --check --strict -o azure-pipelines.yml
+stderr '^info: name: Azure Pipelines names pipelines in the UI; the name "ci" was dropped$'
+stderr '^wrote azure-pipelines\.yml \(CircleCI -> Azure Pipelines\)$'
+stderr '^recorded in \.cishift\.lock$'
+grep '^      - script: go test \./\.\.\.$' azure-pipelines.yml
+
+# Read from stdin; the source provider must then be given.
+stdin .gitlab-ci.yml
+exec cishift - --from gitlab --to bitbucket
+stdout '^# Converted by ci-shift from stdin \(GitLab CI/CD\) to Bitbucket Pipelines\.$'
+stdout '^image: golang:1\.22$'
+stdout '^          - go test \./\.\.\.$'
+
+# Every supported provider, with its name and default file.
+exec cishift providers
+stdout '^github +GitHub Actions +\.github/workflows/ci\.yml$'
+stdout '^bitbucket +Bitbucket Pipelines +bitbucket-pipelines\.yml$'
+
+-- .circleci/config.yml --
+version: 2.1
+jobs:
+  test:
+    docker:
+      - image: cimg/go:1.22
+    steps:
+      - checkout
+      - run: go test ./...
+workflows:
+  ci:
+    jobs:
+      - test
+-- .gitlab-ci.yml --
+test:
+  image: golang:1.22
+  script:
+    - go test ./...
+-- display.sh --
+$ cishift .circleci/config.yml --to azure --check --strict -o azure-pipelines.yml
+info: name: Azure Pipelines names pipelines in the UI; the name "ci" was dropped
+wrote azure-pipelines.yml (CircleCI -> Azure Pipelines)
+recorded in .cishift.lock
+
+$ cat .gitlab-ci.yml | cishift - --from gitlab --to bitbucket
+# Converted by ci-shift from stdin (GitLab CI/CD) to Bitbucket Pipelines.
+# Review before use.
+
+image: golang:1.22
+pipelines:
+  default:
+    - step:
+        name: test
+        script:
+          - go test ./...
+
+$ cishift providers
+github     GitHub Actions       .github/workflows/ci.yml
+gitlab     GitLab CI/CD         .gitlab-ci.yml
+circleci   CircleCI             .circleci/config.yml
+azure      Azure Pipelines      azure-pipelines.yml
+bitbucket  Bitbucket Pipelines  bitbucket-pipelines.yml
