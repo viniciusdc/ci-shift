@@ -1,0 +1,10 @@
+ci-shift
+Copyright 2026 Vinicius Cerutti
+
+This product embeds CI/CD configuration schemas published by third
+parties. Their sources and licenses are listed in schema/snapshots/README.md.
+
+The GitHub workflow schema comes from JSON Schema Store, whose notice is:
+
+  JSON Schema Store
+  Copyright 2015-Current Mads Kristensen and Contributors

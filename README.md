@@ -196,3 +196,7 @@ the release workflow runs the tests and publishes binaries with GoReleaser.
 Adding a provider means implementing `ir.Provider` (`Parse`, `Emit`,
 `Detect`) in `providers/<name>`, registering it in `convert/convert.go`,
 and adding its schema URL to `schema/schema.go`.
+
+## License
+
+[Apache License 2.0](LICENSE). Third-party notices are in [NOTICE](NOTICE).

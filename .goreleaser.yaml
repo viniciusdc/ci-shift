@@ -5,6 +5,10 @@ project_name: cishift
 before:
   hooks:
     - go mod tidy
+    # Collect dependency licenses for the archives. The Windows build links
+    # the most packages (cobra's mousetrap), so its set covers every target.
+    - sh -c 'GOBIN="$PWD/.bin" go install github.com/google/go-licenses/v2@v2.0.1'
+    - sh -c 'GOOS=windows .bin/go-licenses save ./cmd/cishift --save_path=third_party --ignore=github.com/viniciusdc/ci-shift --force'
 
 builds:
   - main: ./cmd/cishift
@@ -22,6 +26,13 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - schema/snapshots/README.md
+      - schema/snapshots/licenses/*
+      - third_party/**/*
 
 checksum:
   name_template: checksums.txt
