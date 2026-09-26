@@ -152,3 +152,29 @@ func TestSchemasAndVersionCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayPath(t *testing.T) {
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ in, want string }{
+		{filepath.Join(wd, ".cishift.lock"), ".cishift.lock"},
+		{filepath.Join(wd, ".github", "workflows", "ci.yml"), ".github/workflows/ci.yml"},
+		{filepath.Join(wd, "..hidden", "x"), "..hidden/x"},
+		{filepath.Join(filepath.Dir(wd), "other.lock"), filepath.ToSlash(filepath.Join(filepath.Dir(wd), "other.lock"))},
+		{wd, filepath.ToSlash(wd)},
+	} {
+		if got := displayPath(tc.in); got != tc.want {
+			t.Errorf("displayPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

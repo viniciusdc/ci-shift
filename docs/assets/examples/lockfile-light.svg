@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
 <svg width="760.00" height="371.00" xmlns="http://www.w3.org/2000/svg">
-<!-- docsmith:sha256:2cbb445ae471e0f3 -->
+<!-- docsmith:sha256:c087480b5e9b56e5 -->
 <style>
 @font-face {
 	font-family: &apos;JetBrains Mono&apos;;
@@ -13,7 +13,7 @@
 <g font-family="JetBrains Mono" font-size="14.00px" fill="#-00001" clip-path="url(#terminalMask)">
 <text x="20.00px" y="51.80px" xml:space="preserve">cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
 </text><text x="20.00px" y="68.60px" xml:space="preserve"><tspan fill="#57606a"># wrote .github/workflows/ci.yml (GitLab CI/CD -&gt; GitHub Actions)</tspan>
-</text><text x="20.00px" y="85.40px" xml:space="preserve"><tspan fill="#57606a"># recorded in /home/me/app/.cishift.lock</tspan>
+</text><text x="20.00px" y="85.40px" xml:space="preserve"><tspan fill="#57606a"># recorded in .cishift.lock</tspan>
 </text><text x="20.00px" y="102.20px" xml:space="preserve">
 </text><text x="20.00px" y="119.00px" xml:space="preserve"><tspan fill="#6639ba">echo</tspan> <tspan fill="#0a3069">&quot;# tweak&quot;</tspan> &gt;&gt; .github/workflows/ci.yml
 </text><text x="20.00px" y="135.80px" xml:space="preserve">cishift verify
