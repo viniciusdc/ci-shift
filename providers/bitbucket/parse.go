@@ -2,6 +2,7 @@ package bitbucket
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -40,6 +41,17 @@ type parser struct {
 	taken      map[string]bool
 	noDownload map[string]bool // steps with artifacts.download: false
 	jobs       []*ir.Job
+	changes    []changeset // per job, in job order
+}
+
+// changeset is a step's condition.changesets, kept to be folded into the
+// trigger path filters when every step of the matching sections agrees.
+type changeset struct {
+	kind    string // section kind of the step
+	path    string
+	include []string
+	exclude []string
+	set     bool
 }
 
 // Parse implements ir.Provider.
@@ -120,6 +132,7 @@ func (Provider) Parse(data []byte, d *ir.Diagnostics) (*ir.Pipeline, error) {
 		ps.parseSection(s, multi)
 	}
 	p.Jobs = ps.jobs
+	ps.foldChangesets(&p.Triggers)
 	addArtifactDownloads(p, ps.noDownload)
 	ir.PromoteExternalVars(p, d, builtinPrefixes...)
 	return p, nil
@@ -178,8 +191,14 @@ func (ps *parser) triggers(secs []*sectionSpec, multi bool) ir.Triggers {
 				d.Infof(s.path, "pull request pipelines filter on the source branch (%q); the filter was dropped", s.pattern)
 			}
 		case kindCustom:
-			t.Manual = true
 			customs = append(customs, s.pattern)
+			if s.pattern == "scheduled" {
+				// Bitbucket keeps the cron in Repository settings > Pipelines >
+				// Schedules, so the schedule has no cron in the IR.
+				t.Schedules = append(t.Schedules, ir.Schedule{})
+			} else {
+				t.Manual = true
+			}
 		}
 	}
 	if len(customs) > 0 {
@@ -199,6 +218,52 @@ func (ps *parser) triggers(secs []*sectionSpec, multi bool) ir.Triggers {
 	return t
 }
 
+// foldChangesets turns step changeset conditions into trigger path
+// filters when every step of the push (default/branches) or pull request
+// pipelines carries the same condition; others are reported and dropped.
+func (ps *parser) foldChangesets(t *ir.Triggers) {
+	fold := func(kinds []string, apply func(cs changeset) bool) {
+		var group []changeset
+		for _, cs := range ps.changes {
+			if contains(kinds, cs.kind) {
+				group = append(group, cs)
+			}
+		}
+		if len(group) == 0 {
+			return
+		}
+		same := group[0].set
+		for _, cs := range group[1:] {
+			if !reflect.DeepEqual(cs.include, group[0].include) || !reflect.DeepEqual(cs.exclude, group[0].exclude) {
+				same = false
+			}
+		}
+		if same && apply(group[0]) {
+			return
+		}
+		for _, cs := range group {
+			if cs.set {
+				ps.d.Warnf(cs.path, "changeset conditions differ between steps and were dropped; the step always runs")
+			}
+		}
+	}
+	fold([]string{kindDefault, kindBranches}, func(cs changeset) bool {
+		if t.Push == nil {
+			return false
+		}
+		t.Push.Paths, t.Push.PathsIgnore = cs.include, cs.exclude
+		return true
+	})
+	fold([]string{kindPR}, func(cs changeset) bool {
+		if t.PullRequest == nil || len(cs.exclude) > 0 {
+			return false
+		}
+		t.PullRequest.Paths = cs.include
+		return true
+	})
+	fold([]string{kindTags, kindCustom}, func(changeset) bool { return false })
+}
+
 // condition returns the job condition implied by the section.
 func (s *sectionSpec) condition() *ir.Condition {
 	switch s.kind {
@@ -211,6 +276,9 @@ func (s *sectionSpec) condition() *ir.Condition {
 	case kindPR:
 		return &ir.Condition{Event: ir.EventPullRequest}
 	case kindCustom:
+		if s.pattern == "scheduled" {
+			return &ir.Condition{Event: ir.EventSchedule}
+		}
 		return &ir.Condition{Event: ir.EventManual}
 	}
 	return nil
@@ -394,9 +462,17 @@ func (ps *parser) parseStep(n *yaml.Node, s *sectionSpec, multi bool, num int, p
 	if !cond.IsZero() {
 		j.If = cond
 	}
+	cs := changeset{kind: s.kind, path: path + ".condition"}
 	if c := yamlx.Get(n, "condition"); c != nil {
-		d.Warnf(path+".condition", "step conditions (changesets/state) are not portable and were dropped; the step always runs")
+		ch := yamlx.Get(c, "changesets")
+		cs.include = yamlx.StrList(yamlx.Get(ch, "includePaths"))
+		cs.exclude = yamlx.StrList(yamlx.Get(ch, "excludePaths"))
+		cs.set = len(cs.include)+len(cs.exclude) > 0
+		if yamlx.Has(c, "state") {
+			d.Warnf(path+".condition.state", "state conditions are not portable and were dropped; the step always runs")
+		}
 	}
+	ps.changes = append(ps.changes, cs)
 	for _, k := range []string{"size", "oidc", "fail-fast", "runtime", "concurrency-group", "input-variables", "auth", "environment", "type", "custom"} {
 		if yamlx.Has(n, k) {
 			d.Infof(path+"."+k, "%q has no portable equivalent and was dropped", k)
@@ -471,8 +547,11 @@ func (ps *parser) cache(name, path string) *ir.Cache {
 	return nil
 }
 
-// parseScript joins consecutive commands into one run step; pipes become
-// action steps in between.
+// parseScript turns script items into steps: consecutive one-line
+// commands are grouped into one run step, any other item (multi-line
+// blocks, compound one-liners) is a step of its own, and pipes become
+// action steps in between. This mirrors how the emitter splits steps, so
+// converting a file twice gives the same result.
 func (ps *parser) parseScript(n *yaml.Node, path string) []*ir.Step {
 	var steps []*ir.Step
 	var buf []string
@@ -485,7 +564,14 @@ func (ps *parser) parseScript(n *yaml.Node, path string) []*ir.Step {
 	for i, item := range yamlx.Items(n) {
 		where := fmt.Sprintf("%s[%d]", path, i)
 		if yamlx.IsScalar(item) {
-			buf = append(buf, fromBB(strings.TrimRight(yamlx.Str(item), "\n"), true))
+			raw := strings.TrimRight(yamlx.Str(item), "\n")
+			cmd := fromBB(raw, true)
+			if _, ok := splitCommands(raw); ok && !strings.Contains(raw, "\n") {
+				buf = append(buf, cmd)
+				continue
+			}
+			flush()
+			steps = append(steps, &ir.Step{Kind: ir.StepRun, Run: cmd})
 			continue
 		}
 		pipe := yamlx.Str(yamlx.Get(item, "pipe"))

@@ -10,6 +10,7 @@ package bitbucket
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/viniciusdc/cistela/internal/yamlx"
@@ -185,4 +186,29 @@ func shellQuote(s string) string {
 		return `'` + strings.ReplaceAll(s, `'`, `'\''`) + `'`
 	}
 	return s
+}
+
+var compoundRe = regexp.MustCompile(`(^|[\s;(])(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)(\s|;|$)|[{}]\s*$|<<|\\$`)
+
+// splitCommands splits a script into one command per line when every line
+// is a self-contained command (no compound statements, heredocs, line
+// continuations or unbalanced quotes). It matches GitLab's splitting so
+// both providers render scripts the same way.
+func splitCommands(script string) ([]string, bool) {
+	var out []string
+	for _, line := range strings.Split(script, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if line != trimmed && !strings.HasPrefix(line, trimmed) {
+			// Indented lines belong to a surrounding construct.
+			return nil, false
+		}
+		if compoundRe.MatchString(trimmed) || strings.Count(trimmed, "'")%2 != 0 || strings.Count(trimmed, `"`)%2 != 0 {
+			return nil, false
+		}
+		out = append(out, trimmed)
+	}
+	return out, len(out) > 0
 }

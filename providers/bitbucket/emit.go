@@ -122,7 +122,11 @@ func (e *emitter) prepare() {
 				}
 			}
 			e.info[j.ID] = in
-			// Images with matrix values differ per expanded step.
+			// The default image counts as "no image"; images with matrix
+			// values differ per expanded step.
+			if img == defaultImage {
+				img = ""
+			}
 			if len(ir.Refs(img, ir.RefMatrix)) > 0 {
 				img = "\x00matrix"
 			}
@@ -273,7 +277,9 @@ func (e *emitter) sections() []*section {
 	if scheduled {
 		var crons []string
 		for _, s := range t.Schedules {
-			crons = append(crons, s.Cron)
+			if s.Cron != "" {
+				crons = append(crons, s.Cron)
+			}
 		}
 		if len(crons) > 0 {
 			d.Warnf("pipelines.custom.scheduled", "create a schedule for the custom pipeline \"scheduled\" in Repository settings > Pipelines > Schedules with cron %s (UTC)", strings.Join(crons, ", "))
@@ -530,8 +536,8 @@ func (e *emitter) step(j *ir.Job, in *jobInfo, s *section, combo []ir.KV, upload
 	if len(j.Env) > 0 {
 		d.Infof(path, "job variables were exported at the start of the step script")
 	}
-	if len(exports) > 0 {
-		script = append(script, strings.Join(exports, "\n"))
+	for _, x := range exports {
+		script = append(script, x)
 	}
 	if in.clone && in.co.Submodules {
 		script = append(script, "git submodule update --init --recursive")
@@ -570,11 +576,12 @@ func (e *emitter) step(j *ir.Job, in *jobInfo, s *section, combo []ir.KV, upload
 				script = append(script, item)
 			}
 		default:
-			cmd := wrapScript(st, tx, where, d)
-			if deferred {
-				after = append(after, cmd)
-			} else {
-				script = append(script, cmd)
+			for _, cmd := range scriptItems(st, deferred, tx, where, d) {
+				if deferred {
+					after = append(after, cmd)
+				} else {
+					script = append(script, cmd)
+				}
 			}
 		}
 	}
@@ -753,6 +760,29 @@ func (e *emitter) action(st *ir.Step, tx func(string) string, where string) any 
 	}
 	pm.SetIf("variables", vars)
 	return pm
+}
+
+// scriptItems renders a run step as script entries: plain steps become one
+// entry per command (idiomatic Bitbucket), anything else a single entry.
+// The parser groups one-line entries back into one step, so the split is
+// stable across conversions.
+func scriptItems(st *ir.Step, deferred bool, tx func(string) string, where string, d *ir.Diagnostics) []any {
+	plain := len(st.Env) == 0 && st.WorkingDir == "" && (!st.AllowFailure || deferred) &&
+		(st.If.IsZero() || (st.If.When == ir.WhenAlways && len(st.If.Branches) == 0 && st.If.Event == "" && !st.If.Manual && st.If.Raw == ""))
+	if plain {
+		body := tx(st.Run)
+		if lines, ok := splitCommands(body); ok {
+			if exprs := ir.ForeignExpressions(body); len(exprs) > 0 {
+				d.Warnf(where, "expressions %s could not be translated", strings.Join(exprs, ", "))
+			}
+			out := make([]any, len(lines))
+			for i, l := range lines {
+				out[i] = l
+			}
+			return out
+		}
+	}
+	return []any{wrapScript(st, tx, where, d)}
 }
 
 // wrapScript renders a run step as one script entry, scoping env vars and

@@ -1,0 +1,141 @@
+# Converted by cistela from bitbucket/full (Bitbucket Pipelines) to Bitbucket Pipelines.
+# Review before use; 3 item(s) need attention:
+#   - pipelines.custom: custom pipelines run manually or from schedules configured in Repository settings > Pipelines > Schedules; schedules are not stored in the file and were not converted
+#   - pipelines.branches.main[1].stage.steps[0].step.script[1]: Bitbucket pipe "atlassian/slack-notify:2.1.0" only exists on Bitbucket Pipelines
+#   - pipelines.custom.deploy-staging[0].variables: custom pipeline variables are prompted at run time and were dropped
+
+clone:
+  lfs: true
+definitions:
+  caches:
+    npm-cache:
+      key:
+        files:
+          - package-lock.json
+      path: ~/.npm
+  services:
+    postgres:
+      image: postgres:16
+      variables:
+        POSTGRES_PASSWORD: example
+pipelines:
+  default:
+    - step:
+        name: Build
+        image: node:20
+        max-time: 30
+        clone:
+          depth: 5
+        caches:
+          - node
+          - npm-cache
+        script:
+          - |-
+            npm ci
+            npm run build -- --sha ${BITBUCKET_COMMIT}
+        artifacts:
+          - dist/**
+    - parallel:
+        - step:
+            name: Unit tests
+            image: node:20
+            max-time: 30
+            clone:
+              depth: 5
+            services:
+              - postgres
+            script:
+              - npm test -- --token ${NPM_TOKEN}
+            after-script:
+              - echo "exit code $BITBUCKET_EXIT_CODE"
+        - step:
+            name: Lint
+            image: node:20
+            max-time: 30
+            clone:
+              depth: 5
+            script:
+              - npm run lint
+  branches:
+    main:
+      - step:
+          name: Build
+          image: node:20
+          max-time: 30
+          clone:
+            depth: 5
+          caches:
+            - node
+            - npm-cache
+          script:
+            - |-
+              npm ci
+              npm run build -- --sha ${BITBUCKET_COMMIT}
+          artifacts:
+            - dist/**
+      - step:
+          name: Publish
+          image: node:20
+          runs-on:
+            - self.hosted
+            - linux
+            - big
+          max-time: 60
+          clone:
+            depth: 5
+          deployment: production
+          script:
+            - npm publish
+            - pipe: atlassian/slack-notify:2.1.0
+              variables:
+                WEBHOOK_URL: ${SLACK_WEBHOOK}
+                MESSAGE: published
+  tags:
+    v*:
+      - step:
+          name: Tag build
+          image: node:22
+          max-time: 30
+          clone:
+            depth: 5
+          script:
+            - echo "${BITBUCKET_TAG}"
+  pull-requests:
+    '**':
+      - step:
+          name: PR check
+          image: node:20
+          max-time: 30
+          clone:
+            depth: full
+          script:
+            - npm test
+  custom:
+    manual:
+      - step:
+          name: Build
+          image: node:20
+          max-time: 30
+          clone:
+            depth: 5
+          caches:
+            - node
+            - npm-cache
+          script:
+            - |-
+              npm ci
+              npm run build -- --sha ${BITBUCKET_COMMIT}
+          artifacts:
+            - dist/**
+      - step:
+          name: Deploy
+          image: node:20
+          max-time: 30
+          clone:
+            depth: 5
+          deployment: staging
+          trigger: manual
+          script:
+            - ./deploy.sh
+          artifacts:
+            download: false
