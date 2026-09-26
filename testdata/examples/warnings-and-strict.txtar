@@ -1,0 +1,32 @@
+# doc:id     warnings-and-strict
+# doc:file   README.md
+# doc:tested true
+
+# Anything dropped or approximated is a warning, on stderr and in the header.
+exec cishift docs.gitlab-ci.yml --to github
+stderr '^warning: docs.rules\[0\]: rules:changes/exists are not portable and were dropped$'
+stdout '^# Review before use; 1 item\(s\) need attention:$'
+stdout '^#   - docs.rules\[0\]: rules:changes/exists are not portable and were dropped$'
+
+# --strict turns warnings into a failing exit code.
+! exec cishift docs.gitlab-ci.yml --to github --strict
+stderr 'rules:changes/exists are not portable'
+
+-- docs.gitlab-ci.yml --
+docs:
+  image: node:20
+  rules:
+    - changes: [docs/**/*]
+  script:
+    - npm ci
+    - npm run docs
+-- display.sh --
+cishift docs.gitlab-ci.yml --to github --strict
+# warning: docs.rules[0]: rules:changes/exists are not portable and were dropped
+# # Converted by ci-shift from docs.gitlab-ci.yml (GitLab CI/CD) to GitHub Actions.
+# # Review before use; 1 item(s) need attention:
+# #   - docs.rules[0]: rules:changes/exists are not portable and were dropped
+# ...
+
+echo $?
+# 1

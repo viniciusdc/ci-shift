@@ -1,0 +1,53 @@
+# doc:id     lockfile
+# doc:file   README.md
+# doc:tested true
+
+# Stop the lockfile search here, as the root of a repository would.
+mkdir .git
+
+# Writing with -o records the output in .cishift.lock.
+exec cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
+stderr '^wrote \.github/workflows/ci\.yml \(GitLab CI/CD -> GitHub Actions\)$'
+stderr '^recorded in .*\.cishift\.lock$'
+exists .cishift.lock
+grep '^    source: \.gitlab-ci\.yml$' .cishift.lock
+grep '^    to: github$' .cishift.lock
+
+exec cishift verify
+stdout '^✓ \.github/workflows/ci\.yml \(from \.gitlab-ci\.yml\)$'
+
+# A hand edit is caught...
+exec sh -c 'echo "# tweak" >> .github/workflows/ci.yml'
+! exec cishift verify
+stdout '^✗ \.github/workflows/ci\.yml: edited by hand since cishift generated it$'
+
+# ...and sync refuses to overwrite it without --force.
+! exec cishift sync
+stdout '^skipped \.github/workflows/ci\.yml: edited by hand \(use --force to overwrite\)$'
+exec cishift sync --force
+stdout '^regenerated \.github/workflows/ci\.yml \(from \.gitlab-ci\.yml\)$'
+exec cishift verify
+! grep 'tweak' .github/workflows/ci.yml
+
+-- .gitlab-ci.yml --
+test:
+  image: golang:1.22
+  script:
+    - go test ./...
+-- display.sh --
+cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
+# wrote .github/workflows/ci.yml (GitLab CI/CD -> GitHub Actions)
+# recorded in /home/me/app/.cishift.lock
+
+echo "# tweak" >> .github/workflows/ci.yml
+cishift verify
+# ✗ .github/workflows/ci.yml: edited by hand since cishift generated it
+#
+# 1 of 1 generated file(s) need attention; run `cishift sync` to regenerate (add
+# --force to overwrite hand edits)
+
+cishift sync --force
+# regenerated .github/workflows/ci.yml (from .gitlab-ci.yml)
+
+cishift verify
+# ✓ .github/workflows/ci.yml (from .gitlab-ci.yml)

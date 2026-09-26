@@ -1,0 +1,57 @@
+# docsmith.toml — configuration for the documentation generators in
+# internal/tools/gen* (from the docsmith template). Run `make generate` after
+# changing it. Paths are relative to the repository root.
+
+[project]
+name    = "ci-shift"
+tagline = "Shift CI/CD pipelines between providers"
+binary  = "cishift"
+main    = "./cmd/cishift"
+
+# ── Banner (internal/tools/genbanner) ────────────────────────────────────────
+[banner]
+title      = "ci-shift"
+subtitle   = "shift CI/CD pipelines between providers"
+output_dir = "docs/assets"
+motif      = "lanes"   # one lane per provider, with pipelines shifting between them
+
+[banner.dark]
+accent  = "#58a6ff"
+palette = ["#58a6ff", "#f0883e", "#3fb950", "#bc8cff", "#2ea6a6"]
+
+[banner.light]
+accent  = "#0969da"
+palette = ["#0969da", "#bc4c00", "#1a7f37", "#8250df", "#1b7c83"]
+
+# ── Diagrams (internal/tools/gendiagram) ─────────────────────────────────────
+[diagrams]
+source_dir = "docs/diagrams"
+output_dir = "docs/assets/diagrams"
+
+# ── Tested examples (internal/tools/genexamples) ─────────────────────────────
+[examples]
+dir     = "testdata/examples"
+svg_dir = "docs/assets/examples"
+width   = 760
+
+# ── Generated docs (internal/tools/gendocs) ──────────────────────────────────
+[docs]
+cli_file    = "docs/CLI.md"
+layout_file = "README.md"
+
+[docs.layout]
+root_files = ["Makefile", "docsmith.toml", "go.mod"]
+skip       = ["testdata", "assets", "licenses", "dist", "third_party", "vendor"]
+max_depth  = 3
+
+[docs.layout.annotations]
+"Makefile"         = "Build, test, lint, schema and docs targets"
+"docsmith.toml"    = "Configuration for the docs generators"
+"go.mod"           = "Module github.com/viniciusdc/ci-shift"
+"cmd"              = "Executable entry points"
+"docs"             = "CLI reference, lockfile and translation guides"
+"docs/diagrams"    = "Diagram sources (TOML) for gendiagram"
+"internal"         = "Packages private to this module"
+"internal/tools"   = "Maintenance commands, run through make"
+"providers"        = "One parser + emitter per CI provider"
+"schema/snapshots" = "Provider JSON schemas built into the binary"
