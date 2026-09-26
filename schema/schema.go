@@ -1,14 +1,17 @@
 // Package schema validates CI configuration files against the providers'
 // published JSON schemas.
 //
-// Snapshots of every schema are embedded so validation works offline and
-// deterministically. Latest can be set to download fresh copies (cached
-// for a day in the user cache directory).
+// Schemas come from two places. Snapshots of every schema are embedded in
+// the binary, so validation works offline and deterministically. Update
+// downloads current copies into the user cache directory; from then on the
+// cached copies are preferred, until they are removed or Embedded is set.
 package schema
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,12 +54,126 @@ var Sources = []Source{
 
 // Options control where schemas come from.
 type Options struct {
-	// Latest downloads the current schema instead of the embedded snapshot.
+	// Embedded forces the snapshots built into the binary, ignoring copies
+	// downloaded by Update.
+	Embedded bool
+	// Latest downloads the current schema now (and refreshes the cache).
 	Latest bool
-	// CacheDir overrides the download cache location.
+	// CacheDir overrides the cache location. The default is
+	// $CISHIFT_CACHE_DIR, or ci-shift/schemas in the user cache directory.
 	CacheDir string
 	// HTTPClient overrides the client used for downloads.
 	HTTPClient *http.Client
+}
+
+// Origins of a schema document.
+const (
+	OriginEmbedded = "embedded"
+	OriginCache    = "cache"
+	OriginDownload = "download"
+)
+
+// Document is a resolved schema.
+type Document struct {
+	Provider  string
+	Origin    string    // OriginEmbedded, OriginCache or OriginDownload
+	Path      string    // cache file, for cached and downloaded documents
+	UpdatedAt time.Time // cache file time, for cached and downloaded documents
+	SHA256    string
+	data      []byte
+}
+
+// Fingerprint identifies the exact schema used, e.g. "github@sha256:1a2b3c4d5e6f".
+func (d Document) Fingerprint() string {
+	return d.Provider + "@sha256:" + d.SHA256[:12]
+}
+
+func newDocument(provider, origin string, data []byte) Document {
+	sum := sha256.Sum256(data)
+	return Document{Provider: provider, Origin: origin, SHA256: hex.EncodeToString(sum[:]), data: data}
+}
+
+// CacheDir returns the directory downloaded schemas are stored in.
+func CacheDir(opts Options) string {
+	if opts.CacheDir != "" {
+		return opts.CacheDir
+	}
+	if env := os.Getenv("CISHIFT_CACHE_DIR"); env != "" {
+		return env
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return filepath.Join(base, "ci-shift", "schemas")
+}
+
+// Resolve finds the schema document a provider's validation would use.
+func Resolve(provider string, opts Options) (Document, error) {
+	src, err := sourceFor(provider)
+	if err != nil {
+		return Document{}, err
+	}
+	if opts.Latest {
+		return download(src, opts)
+	}
+	if !opts.Embedded {
+		path := filepath.Join(CacheDir(opts), src.file())
+		if data, err := os.ReadFile(path); err == nil && json.Valid(data) {
+			doc := newDocument(provider, OriginCache, data)
+			doc.Path = path
+			if st, err := os.Stat(path); err == nil {
+				doc.UpdatedAt = st.ModTime()
+			}
+			return doc, nil
+		}
+	}
+	data, err := snapshots.ReadFile("snapshots/" + src.file())
+	if err != nil {
+		return Document{}, err
+	}
+	return newDocument(provider, OriginEmbedded, data), nil
+}
+
+// Status resolves the schema of every provider without downloading.
+func Status(opts Options) ([]Document, error) {
+	opts.Latest = false
+	var out []Document
+	for _, s := range Sources {
+		d, err := Resolve(s.Provider, opts)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// Update downloads the current schema of every provider into the cache.
+// It returns the documents fetched and an error per failed provider.
+func Update(opts Options) ([]Document, map[string]error) {
+	var docs []Document
+	errs := map[string]error{}
+	for _, s := range Sources {
+		d, err := download(s, opts)
+		if err != nil {
+			errs[s.Provider] = err
+			continue
+		}
+		docs = append(docs, d)
+	}
+	return docs, errs
+}
+
+// Reset removes downloaded schemas so the embedded snapshots are used again.
+func Reset(opts Options) error {
+	for _, s := range Sources {
+		err := os.Remove(filepath.Join(CacheDir(opts), s.file()))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // Issue is a single validation problem.
@@ -89,34 +206,26 @@ func sourceFor(provider string) (Source, error) {
 
 // Load returns the compiled schema for a provider.
 func Load(provider string, opts Options) (*jsonschema.Schema, error) {
-	src, err := sourceFor(provider)
+	doc, err := Resolve(provider, opts)
 	if err != nil {
 		return nil, err
 	}
-	key := provider
-	if opts.Latest {
-		key += "@latest"
+	return compile(doc)
+}
+
+func compile(d Document) (*jsonschema.Schema, error) {
+	src, err := sourceFor(d.Provider)
+	if err != nil {
+		return nil, err
 	}
 	compiledMu.Lock()
 	defer compiledMu.Unlock()
-	if s, ok := compiled[key]; ok {
+	if s, ok := compiled[d.SHA256]; ok {
 		return s, nil
 	}
-	var data []byte
-	if opts.Latest {
-		data, err = download(src, opts)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		data, err = snapshots.ReadFile("snapshots/" + src.file())
-		if err != nil {
-			return nil, err
-		}
-	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(d.data))
 	if err != nil {
-		return nil, fmt.Errorf("parse %s schema: %w", provider, err)
+		return nil, fmt.Errorf("parse %s schema: %w", d.Provider, err)
 	}
 	sanitize(doc)
 	c := jsonschema.NewCompiler()
@@ -127,9 +236,9 @@ func Load(provider string, opts Options) (*jsonschema.Schema, error) {
 	}
 	s, err := c.Compile(src.URL)
 	if err != nil {
-		return nil, fmt.Errorf("compile %s schema: %w", provider, err)
+		return nil, fmt.Errorf("compile %s schema: %w", d.Provider, err)
 	}
-	compiled[key] = s
+	compiled[d.SHA256] = s
 	return s, nil
 }
 
@@ -141,42 +250,41 @@ func (offlineLoader) Load(url string) (any, error) {
 	return nil, fmt.Errorf("schema references external document %s", url)
 }
 
-func download(src Source, opts Options) ([]byte, error) {
-	dir := opts.CacheDir
-	if dir == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			base = os.TempDir()
-		}
-		dir = filepath.Join(base, "ci-shift", "schemas")
-	}
-	cached := filepath.Join(dir, src.file())
-	if st, err := os.Stat(cached); err == nil && time.Since(st.ModTime()) < 24*time.Hour {
-		return os.ReadFile(cached)
-	}
+func download(src Source, opts Options) (Document, error) {
 	client := opts.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	resp, err := client.Get(src.URL)
 	if err != nil {
-		return nil, fmt.Errorf("download %s schema: %w", src.Provider, err)
+		return Document{}, fmt.Errorf("download %s schema: %w", src.Provider, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download %s schema: %s", src.Provider, resp.Status)
+		return Document{}, fmt.Errorf("download %s schema: %s", src.Provider, resp.Status)
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return Document{}, err
 	}
 	if !json.Valid(data) {
-		return nil, fmt.Errorf("download %s schema: response is not JSON", src.Provider)
+		return Document{}, fmt.Errorf("download %s schema: response is not JSON", src.Provider)
 	}
-	if err := os.MkdirAll(dir, 0o755); err == nil {
-		_ = os.WriteFile(cached, data, 0o644)
+	doc := newDocument(src.Provider, OriginDownload, data)
+	// Make sure the new schema compiles before it replaces anything.
+	if _, err := compile(doc); err != nil {
+		return Document{}, err
 	}
-	return data, nil
+	dir := CacheDir(opts)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return Document{}, err
+	}
+	doc.Path = filepath.Join(dir, src.file())
+	if err := os.WriteFile(doc.Path, data, 0o644); err != nil {
+		return Document{}, err
+	}
+	doc.UpdatedAt = time.Now()
+	return doc, nil
 }
 
 // Validate checks a YAML document against the provider's schema. It

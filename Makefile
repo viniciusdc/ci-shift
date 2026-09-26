@@ -1,7 +1,7 @@
 BINARY_NAME = cishift
 INSTALL_DIR = $(HOME)/.local/bin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS = -s -w -X github.com/viniciusdc/ci-shift/internal/cli.Version=$(VERSION)
+LDFLAGS = -s -w -X github.com/viniciusdc/ci-shift/internal/buildinfo.version=$(VERSION)
 
 .PHONY: all build clean fmt lint test golden install uninstall install-tools schemas ci
 

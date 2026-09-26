@@ -12,12 +12,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/viniciusdc/ci-shift/convert"
+	"github.com/viniciusdc/ci-shift/internal/buildinfo"
+	"github.com/viniciusdc/ci-shift/internal/lockfile"
 	"github.com/viniciusdc/ci-shift/ir"
 	"github.com/viniciusdc/ci-shift/schema"
 )
-
-// Version is set at build time with -ldflags "-X .../internal/cli.Version=...".
-var Version = "dev"
 
 // ExitError carries a process exit code without printing a Go error.
 type ExitError struct{ Code int }
@@ -63,7 +62,7 @@ model, and checks them against each provider's JSON schema.`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Version:       Version,
+		Version:       buildinfo.Version(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
@@ -91,6 +90,10 @@ model, and checks them against each provider's JSON schema.`,
 		newCheckCmd(stdin, stdout),
 		newDetectCmd(stdin, stdout),
 		newProvidersCmd(stdout),
+		newVerifyCmd(stdout),
+		newSyncCmd(stdout, stderr),
+		newSchemasCmd(stdout, stderr),
+		newVersionCmd(stdout),
 	)
 	return root
 }
@@ -111,8 +114,8 @@ func resolveProvider(name, path string, data []byte) (ir.Provider, error) {
 
 // convertOpts are the flags of a conversion.
 type convertOpts struct {
-	from, to, output               string
-	noHeader, strict, check, quiet bool
+	from, to, output, lock                        string
+	noHeader, strict, check, quiet, noLock, force bool
 }
 
 func (o *convertOpts) bind(cmd *cobra.Command) {
@@ -124,6 +127,9 @@ func (o *convertOpts) bind(cmd *cobra.Command) {
 	f.BoolVar(&o.strict, "strict", false, "exit 1 when the conversion produced warnings")
 	f.BoolVar(&o.check, "check", false, "check the output against the target provider's schema")
 	f.BoolVarP(&o.quiet, "quiet", "q", false, "do not print diagnostics")
+	f.StringVar(&o.lock, "lock", "", "lockfile to record the output in (default: nearest "+lockfile.Name+")")
+	f.BoolVar(&o.noLock, "no-lock", false, "do not record the output in the lockfile")
+	f.BoolVar(&o.force, "force", false, "overwrite an output that was edited by hand")
 }
 
 func runConvert(path string, o convertOpts, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -142,9 +148,39 @@ func runConvert(path string, o convertOpts, stdin io.Reader, stdout, stderr io.W
 	if err != nil {
 		return err
 	}
+	toFile := o.output != "" && o.output != "-"
+
+	// Files written to disk are recorded in the lockfile, keyed by their
+	// lockfile-relative path; the header then names the source the same way
+	// so `cishift sync` reproduces it byte for byte from anywhere.
+	var lf *lockfile.File
+	var entry lockfile.Entry
+	sourceName := displayName(path)
+	if toFile && !o.noLock {
+		if path == "-" {
+			if !o.quiet {
+				fmt.Fprintln(stderr, "info: output converted from stdin is not recorded in the lockfile")
+			}
+		} else {
+			if lf, err = openLock(o.lock); err != nil {
+				return err
+			}
+			if entry.Output, err = lf.Rel(o.output); err != nil {
+				return err
+			}
+			if entry.Source, err = lf.Rel(path); err != nil {
+				return err
+			}
+			sourceName = entry.Source
+			if err := guardHandEdits(lf, entry.Output, o.force); err != nil {
+				return err
+			}
+		}
+	}
+
 	res, err := convert.Convert(data, src, dst, convert.Options{
 		Header:     !o.noHeader,
-		SourceName: displayName(path),
+		SourceName: sourceName,
 	})
 	if err != nil {
 		return err
@@ -154,21 +190,25 @@ func runConvert(path string, o convertOpts, stdin io.Reader, stdout, stderr io.W
 			fmt.Fprintln(stderr, d)
 		}
 	}
-	if o.output == "" || o.output == "-" {
+	if !toFile {
 		if _, err := stdout.Write(res.Output); err != nil {
 			return err
 		}
 	} else {
-		if dir := filepath.Dir(o.output); dir != "." {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				return err
-			}
-		}
-		if err := os.WriteFile(o.output, res.Output, 0o644); err != nil {
+		if err := writeFile(o.output, res.Output); err != nil {
 			return err
 		}
 		if !o.quiet {
 			fmt.Fprintf(stderr, "wrote %s (%s -> %s)\n", o.output, src.Title(), dst.Title())
+		}
+		if lf != nil {
+			entry.From, entry.To, entry.NoHeader = src.Name(), dst.Name(), o.noHeader
+			if err := record(lf, entry, data, res.Output); err != nil {
+				return err
+			}
+			if !o.quiet {
+				fmt.Fprintf(stderr, "recorded in %s\n", displayPath(lf.Path()))
+			}
 		}
 	}
 	failed := false
@@ -196,6 +236,15 @@ func runConvert(path string, o convertOpts, stdin io.Reader, stdout, stderr io.W
 	return nil
 }
 
+func writeFile(path string, data []byte) error {
+	if dir := filepath.Dir(path); dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
 func displayName(path string) string {
 	if path == "-" {
 		return "stdin"
@@ -205,7 +254,7 @@ func displayName(path string) string {
 
 func newCheckCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var provider string
-	var latest bool
+	var latest, embedded bool
 	cmd := &cobra.Command{
 		Use:     "check <file|->...",
 		Aliases: []string{"validate"},
@@ -222,7 +271,7 @@ func newCheckCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				issues, err := schema.Validate(p.Name(), data, schema.Options{Latest: latest})
+				issues, err := schema.Validate(p.Name(), data, schema.Options{Latest: latest, Embedded: embedded})
 				if err != nil {
 					return err
 				}
@@ -243,7 +292,8 @@ func newCheckCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&provider, "provider", "p", "", "provider (detected from the file when omitted)")
-	cmd.Flags().BoolVar(&latest, "latest", false, "download the latest schema instead of the embedded snapshot")
+	cmd.Flags().BoolVar(&latest, "latest", false, "download the latest schemas first (updates the cache)")
+	cmd.Flags().BoolVar(&embedded, "embedded", false, "use the schemas built into cishift, ignoring updated copies")
 	return cmd
 }
 

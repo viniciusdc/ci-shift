@@ -26,8 +26,10 @@ model (`ir`) and an emitter back out of it:
 
 ```bash
 go install github.com/viniciusdc/ci-shift/cmd/cishift@latest
-# or from a checkout
+# or download a binary from the GitHub releases page, or from a checkout:
 make build && ./cishift --help
+
+cishift version --check   # is there a newer release?
 ```
 
 ## Usage
@@ -44,7 +46,7 @@ cat bitbucket-pipelines.yml | cishift - --from bitbucket --to gitlab
 
 # Check files against their provider schema
 cishift check .github/workflows/*.yml
-cishift check --latest .gitlab-ci.yml   # use the newest upstream schema
+cishift check --latest .gitlab-ci.yml   # download the newest schemas first
 
 # Which provider is this file for?
 cishift detect some-pipeline.yml
@@ -65,6 +67,59 @@ Steps that cannot be translated, such as third-party GitHub actions,
 CircleCI orbs, Azure tasks or Bitbucket pipes, become a **failing
 placeholder step**. A converted pipeline therefore never silently skips
 work.
+
+## Keeping generated files in sync
+
+Writing a file with `-o` records how it was produced in `.cishift.lock`.
+cishift uses the nearest `.cishift.lock` in the current directory or its
+parents, or creates one at the root of the git repository. Commit it. The generated pipelines stay untouched; all
+the provenance lives in the lockfile:
+
+```yaml
+version: 1
+generated:
+  - output: .github/workflows/ci.yml
+    source: .gitlab-ci.yml
+    from: gitlab
+    to: github
+    cishift: v0.4.0
+    schema: github@sha256:d10c9f4656e1
+    source_sha256: sha256:e786…
+    output_sha256: sha256:f672…
+```
+
+```bash
+cishift verify   # offline check of every recorded file; exits 1 on problems
+cishift sync     # regenerate them all (add --force to overwrite hand edits)
+```
+
+`verify` reports four kinds of problem:
+- an output is missing;
+- an output was **edited by hand** since it was generated;
+- its **source changed**;
+- the installed cishift would now **generate it differently**, e.g. after an
+  upgrade.
+
+That makes `cishift verify` a good CI step when a repository keeps pipelines
+for several providers generated from one source. Regenerating a file that
+was edited by hand is refused unless you pass `--force`, and `--no-lock`
+skips recording a file.
+
+## Schemas
+
+Every provider's JSON schema is built into cishift, so `check` works offline
+and gives the same verdict on every machine. To use the providers' current
+schemas instead:
+
+```bash
+cishift schemas          # which schema each provider uses (built-in or cached)
+cishift schemas update   # download the current schemas into the user cache
+cishift schemas reset    # go back to the built-in snapshots
+cishift check --embedded file.yml   # ignore downloaded schemas for one check
+```
+
+Downloaded schemas are only used after an explicit `update`. No other
+command goes online, except `version --check`.
 
 ## What gets translated
 
@@ -120,6 +175,7 @@ providers/*/    one parser + emitter per provider
 convert/        provider registry, detection, conversion
 schema/         JSON schema validation (embedded snapshots in schema/snapshots)
 internal/cli/   cobra commands
+internal/lockfile/  .cishift.lock reading and writing
 cmd/cishift/    the cishift binary
 internal/yamlx/ order-preserving YAML read/write helpers
 testdata/       sample pipelines and golden conversion outputs
@@ -131,8 +187,11 @@ testdata/       sample pipelines and golden conversion outputs
 make test      # unit, round-trip, cross-provider golden and schema tests
 make lint      # golangci-lint
 make golden    # regenerate golden outputs after an intentional change
-make schemas   # refresh embedded schema snapshots from upstream
+make schemas   # refresh the schema snapshots built into the binary
 ```
+
+Releases are cut by pushing a tag (`git tag v0.1.0 && git push --tags`):
+the release workflow runs the tests and publishes binaries with GoReleaser.
 
 Adding a provider means implementing `ir.Provider` (`Parse`, `Emit`,
 `Detect`) in `providers/<name>`, registering it in `convert/convert.go`,
