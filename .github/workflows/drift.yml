@@ -1,0 +1,43 @@
+name: Drift
+
+# Regenerates the generated parts of the docs (banner, diagram, CLI
+# reference, project layout, example snippets) and fails if the result
+# differs from what is committed, so hand edits to generated sections and
+# forgotten `make generate` runs do not slip through.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Generated docs are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Pure Go generators: output is reproducible byte for byte.
+      - name: Banner, diagram, CLI reference and layout
+        run: |
+          go run ./internal/tools/genbanner
+          go run ./internal/tools/gendiagram
+          go run ./internal/tools/gendocs
+          git diff --exit-code
+
+      # freeze is not installed here: its SVGs can differ between machines,
+      # so they are rendered locally and committed. genexamples reuses them
+      # while they match their snippet and falls back to a code block when
+      # they are stale, which changes the Markdown and fails this step.
+      - name: Examples
+        run: make examples-check

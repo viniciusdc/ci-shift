@@ -1,0 +1,33 @@
+# doc:id     check
+# doc:file   README.md
+# doc:tested true
+
+# A valid file passes.
+exec cishift check .gitlab-ci.yml
+stdout '^\.gitlab-ci\.yml: valid GitLab CI/CD configuration$'
+
+# One invalid file fails the whole run and says where.
+! exec cishift check .gitlab-ci.yml broken.yml --provider gitlab
+stdout '^broken\.yml: invalid GitLab CI/CD configuration$'
+stdout '^  - /test/when: value must be one of ''on_success'', ''on_failure'', ''always'', ''never'', ''manual'', ''delayed''$'
+
+-- .gitlab-ci.yml --
+test:
+  image: golang:1.22
+  script:
+    - go test ./...
+-- broken.yml --
+test:
+  image: golang:1.22
+  script:
+    - go test ./...
+  when: sometimes
+-- display.sh --
+cishift check .gitlab-ci.yml broken.yml --provider gitlab
+# .gitlab-ci.yml: valid GitLab CI/CD configuration
+# broken.yml: invalid GitLab CI/CD configuration
+#   - /test/when: value must be one of 'on_success', 'on_failure', 'always', 'never',
+#     'manual', 'delayed'
+
+echo $?
+# 1

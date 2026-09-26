@@ -1,0 +1,40 @@
+# doc:id     detect
+# doc:file   README.md
+# doc:tested true
+
+# Detection looks at the content, so any file name works.
+exec cishift detect pipeline-a.yml pipeline-b.yml pipeline-c.yml
+stdout '^pipeline-a\.yml: github$'
+stdout '^pipeline-b\.yml: circleci$'
+stdout '^pipeline-c\.yml: bitbucket$'
+
+-- pipeline-a.yml --
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make test
+-- pipeline-b.yml --
+version: 2.1
+jobs:
+  test:
+    docker:
+      - image: cimg/go:1.22
+    steps:
+      - checkout
+      - run: make test
+workflows:
+  main:
+    jobs: [test]
+-- pipeline-c.yml --
+pipelines:
+  default:
+    - step:
+        script:
+          - make test
+-- display.sh --
+cishift detect pipeline-a.yml pipeline-b.yml pipeline-c.yml
+# pipeline-a.yml: github
+# pipeline-b.yml: circleci
+# pipeline-c.yml: bitbucket

@@ -1,0 +1,59 @@
+# doc:id     convert-gitlab-to-github
+# doc:file   README.md
+# doc:tested true
+
+# The provider is detected from the file; the output starts with a header
+# naming the source, and variables the file never defines become secrets.
+exec cishift .gitlab-ci.yml --to github
+stderr '^info: variables defined outside the file were treated as secrets: DEPLOY_TOKEN$'
+stdout '^# Converted by ci-shift from .gitlab-ci.yml \(GitLab CI/CD\) to GitHub Actions\.$'
+stdout '^# Review before use\.$'
+stdout '^    needs: test$'
+stdout '^    if: github.ref == ''refs/heads/main''$'
+stdout '^          DEPLOY_TOKEN: \$\{\{ secrets.DEPLOY_TOKEN \}\}$'
+
+# The result passes the GitHub schema, and --strict has nothing to fail on.
+exec cishift .gitlab-ci.yml --to github --check --strict
+
+-- .gitlab-ci.yml --
+stages: [test, deploy]
+
+test:
+  stage: test
+  image: golang:1.22
+  script:
+    - go test ./...
+
+deploy:
+  stage: deploy
+  image: alpine:3.20
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - ./deploy.sh "$DEPLOY_TOKEN"
+-- display.sh --
+cishift .gitlab-ci.yml --to github
+# info: variables defined outside the file were treated as secrets: DEPLOY_TOKEN
+# # Converted by ci-shift from .gitlab-ci.yml (GitLab CI/CD) to GitHub Actions.
+# # Review before use.
+#
+# name: CI
+# on:
+#   push:
+# jobs:
+#   test:
+#     runs-on: ubuntu-latest
+#     container: golang:1.22
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: go test ./...
+#   deploy:
+#     needs: test
+#     if: github.ref == 'refs/heads/main'
+#     runs-on: ubuntu-latest
+#     container: alpine:3.20
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: ./deploy.sh "${DEPLOY_TOKEN}"
+#         env:
+#           DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

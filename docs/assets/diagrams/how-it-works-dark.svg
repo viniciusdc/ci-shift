@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="348" viewBox="0 0 1020 348">
+  <defs>
+    <marker id="arr" markerWidth="7" markerHeight="7" refX="7" refY="2.5" orient="auto">
+      <path d="M0,0 L0,5 L7,2.5 z" fill="#484f58"/>
+    </marker>
+    <marker id="arr-d" markerWidth="7" markerHeight="7" refX="7" refY="2.5" orient="auto">
+      <path d="M0,0 L0,5 L7,2.5 z" fill="#30363d"/>
+    </marker>
+    <pattern id="dots-d" patternUnits="userSpaceOnUse" width="9" height="9">
+      <circle cx="4.5" cy="4.5" r="1" fill="#f0883e" opacity="0.18"/>
+    </pattern>
+    <pattern id="dots-l" patternUnits="userSpaceOnUse" width="9" height="9">
+      <circle cx="4.5" cy="4.5" r="1" fill="#f0883e" opacity="0.12"/>
+    </pattern>
+  </defs>
+  <g transform="scale(1.2)">
+  <rect width="850" height="290" fill="#0d1117" rx="10"/>
+  <text x="22.0" y="24.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#e6edf3">ci-shift — one pipeline model between five providers</text>
+  <rect x="8.0" y="40.0" width="164.0" height="232.0" fill="#161b22" stroke="#21262d" stroke-width="1" rx="8" opacity="0.85"/>
+  <text x="22.0" y="54.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" fill="#8b949e">--from (detected)</text>
+  <rect x="678.0" y="40.0" width="164.0" height="232.0" fill="#161b22" stroke="#21262d" stroke-width="1" rx="8" opacity="0.85"/>
+  <text x="692.0" y="54.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" fill="#8b949e">--to</text>
+  <path d="M158.0,85.0 C237.0,84.2 158.0,165.8 237.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M158.0,125.0 C237.0,124.6 158.0,165.4 237.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M158.0,165.0 C237.0,165.0 158.0,165.0 237.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M158.0,205.0 C237.0,205.4 158.0,164.6 237.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M158.0,245.0 C237.0,245.8 158.0,164.2 237.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M316.0,165.0 C364.0,165.0 316.0,165.0 364.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M479.0,165.0 C527.0,165.0 479.0,165.0 527.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M606.0,165.0 C689.0,165.8 606.0,84.2 689.0,85.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M606.0,165.0 C689.0,165.4 606.0,124.6 689.0,125.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M606.0,165.0 C689.0,165.0 606.0,165.0 689.0,165.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M606.0,165.0 C689.0,164.6 606.0,205.4 689.0,205.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M606.0,165.0 C689.0,164.2 606.0,245.8 689.0,245.0" fill="none" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="22.0" y="70.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="90.0" y="88.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">GITHUB ACTIONS</text>
+  <rect x="22.0" y="110.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="90.0" y="128.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">GITLAB CI/CD</text>
+  <rect x="22.0" y="150.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="90.0" y="168.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">CIRCLECI</text>
+  <rect x="22.0" y="190.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="90.0" y="208.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">AZURE PIPELINES</text>
+  <rect x="22.0" y="230.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="90.0" y="248.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">BITBUCKET PIPELINES</text>
+  <rect x="240.0" y="150.0" width="76.0" height="30.0" fill="#2d1a08" stroke="#f0883e" stroke-width="1.5" rx="14"/>
+  <rect x="240.0" y="150.0" width="76.0" height="30.0" fill="url(#dots-d)" rx="14"/>
+  <text x="278.0" y="168.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="700" fill="#f0883e" text-anchor="middle" letter-spacing="0.6">PARSE</text>
+  <rect x="367.0" y="150.0" width="112.0" height="30.0" fill="#2d1a08" stroke="#f0883e" stroke-width="1.5" rx="14"/>
+  <rect x="367.0" y="150.0" width="112.0" height="30.0" fill="url(#dots-d)" rx="14"/>
+  <text x="423.0" y="168.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="700" fill="#f0883e" text-anchor="middle" letter-spacing="0.6">IR.PIPELINE</text>
+  <rect x="530.0" y="150.0" width="76.0" height="30.0" fill="#2d1a08" stroke="#f0883e" stroke-width="1.5" rx="14"/>
+  <rect x="530.0" y="150.0" width="76.0" height="30.0" fill="url(#dots-d)" rx="14"/>
+  <text x="568.0" y="168.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="700" fill="#f0883e" text-anchor="middle" letter-spacing="0.6">EMIT</text>
+  <rect x="692.0" y="70.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="760.0" y="88.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">GITHUB ACTIONS</text>
+  <rect x="692.0" y="110.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="760.0" y="128.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">GITLAB CI/CD</text>
+  <rect x="692.0" y="150.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="760.0" y="168.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">CIRCLECI</text>
+  <rect x="692.0" y="190.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="760.0" y="208.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">AZURE PIPELINES</text>
+  <rect x="692.0" y="230.0" width="136.0" height="30.0" fill="#161b22" stroke="#30363d" stroke-width="1" rx="14"/>
+  <text x="760.0" y="248.5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="10" font-weight="600" fill="#c9d1d9" text-anchor="middle" letter-spacing="0.4">BITBUCKET PIPELINES</text>
+  </g>
+</svg>
