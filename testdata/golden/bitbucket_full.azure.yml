@@ -1,0 +1,217 @@
+# Converted by cistela from bitbucket/full (Bitbucket Pipelines) to Azure Pipelines.
+# Review before use; 11 item(s) need attention:
+#   - pipelines.custom: custom pipelines run manually or from schedules configured in Repository settings > Pipelines > Schedules; schedules are not stored in the file and were not converted
+#   - pipelines.branches.main[1].stage.steps[0].step.script[1]: Bitbucket pipe "atlassian/slack-notify:2.1.0" only exists on Bitbucket Pipelines
+#   - pipelines.custom.deploy-staging[0].variables: custom pipeline variables are prompted at run time and were dropped
+#   - jobs.default_build.steps[2]: Cache@2 does not expand ~ in "~/.npm"; use an absolute path such as $(Pipeline.Workspace)/...
+#   - jobs.default_build.steps[4]: Azure publishes a single path; publishing "dist", which contains dist/**
+#   - jobs.main_build.steps[2]: Cache@2 does not expand ~ in "~/.npm"; use an absolute path such as $(Pipeline.Workspace)/...
+#   - jobs.main_build.steps[4]: Azure publishes a single path; publishing "dist", which contains dist/**
+#   - jobs.main_publish.steps[3]: bitbucket step "atlassian/slack-notify:2.1.0" has no Azure Pipelines equivalent; a failing placeholder step was emitted
+#   - jobs.deploy_staging_build.steps[2]: Cache@2 does not expand ~ in "~/.npm"; use an absolute path such as $(Pipeline.Workspace)/...
+#   - jobs.deploy_staging_build.steps[4]: Azure publishes a single path; publishing "dist", which contains dist/**
+#   - jobs.deploy_staging_deploy: manual approval gates map to approval checks; add one to environment "staging"
+
+trigger:
+  branches:
+    include:
+      - '*'
+  tags:
+    include:
+      - v*
+resources:
+  containers:
+    - container: postgres
+      image: postgres:16
+      env:
+        POSTGRES_PASSWORD: example
+jobs:
+  - job: default_build
+    displayName: Build
+    condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    steps:
+      - checkout: self
+        fetchDepth: '5'
+        lfs: 'true'
+      - task: Cache@2
+        inputs:
+          key: node | "$(Agent.OS)"
+          path: node_modules
+      - task: Cache@2
+        inputs:
+          key: npm-cache | "$(Agent.OS)" | package-lock.json
+          restoreKeys: npm-cache | "$(Agent.OS)"
+          path: ~/.npm
+      - script: |-
+          npm ci
+          npm run build -- --sha $(Build.SourceVersion)
+      - publish: dist
+        artifact: default-build
+  - job: default_unit_tests
+    displayName: Unit tests
+    dependsOn: default_build
+    condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    services:
+      postgres: postgres
+    steps:
+      - checkout: self
+        fetchDepth: '5'
+        lfs: 'true'
+      - task: DownloadPipelineArtifact@2
+        displayName: Download default-build
+        inputs:
+          buildType: current
+          artifactName: default-build
+          targetPath: $(Build.SourcesDirectory)/dist
+      - script: npm test -- --token ${NPM_TOKEN}
+        env:
+          NPM_TOKEN: $(NPM_TOKEN)
+      - script: echo "exit code $BITBUCKET_EXIT_CODE"
+        condition: always()
+        continueOnError: 'true'
+  - job: default_lint
+    displayName: Lint
+    dependsOn: default_build
+    condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    steps:
+      - checkout: self
+        fetchDepth: '5'
+        lfs: 'true'
+      - task: DownloadPipelineArtifact@2
+        displayName: Download default-build
+        inputs:
+          buildType: current
+          artifactName: default-build
+          targetPath: $(Build.SourcesDirectory)/dist
+      - script: npm run lint
+  - job: main_build
+    displayName: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    steps:
+      - checkout: self
+        fetchDepth: '5'
+        lfs: 'true'
+      - task: Cache@2
+        inputs:
+          key: node | "$(Agent.OS)"
+          path: node_modules
+      - task: Cache@2
+        inputs:
+          key: npm-cache | "$(Agent.OS)" | package-lock.json
+          restoreKeys: npm-cache | "$(Agent.OS)"
+          path: ~/.npm
+      - script: |-
+          npm ci
+          npm run build -- --sha $(Build.SourceVersion)
+      - publish: dist
+        artifact: main-build
+  - deployment: main_publish
+    displayName: Publish
+    dependsOn: main_build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    timeoutInMinutes: '60'
+    pool:
+      name: linux
+      demands:
+        - big
+    container: node:20
+    environment: production
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: none
+            - checkout: self
+              fetchDepth: '5'
+              lfs: 'true'
+            - task: DownloadPipelineArtifact@2
+              displayName: Download main-build
+              inputs:
+                buildType: current
+                artifactName: main-build
+                targetPath: $(Build.SourcesDirectory)/dist
+            - script: npm publish
+            - script: 'echo "##vso[task.logissue type=error]cistela: port bitbucket step ''atlassian/slack-notify:2.1.0'' manually" && exit 1'
+  - job: tag_v_tag_build
+    displayName: Tag build
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:22
+    steps:
+      - checkout: self
+        fetchDepth: '5'
+        lfs: 'true'
+      - script: echo "$(Build.SourceBranchName)"
+  - job: pr_pr_check
+    displayName: PR check
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    steps:
+      - checkout: self
+        fetchDepth: '0'
+        lfs: 'true'
+      - script: npm test
+  - job: deploy_staging_build
+    displayName: Build
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    steps:
+      - checkout: self
+        fetchDepth: '5'
+        lfs: 'true'
+      - task: Cache@2
+        inputs:
+          key: node | "$(Agent.OS)"
+          path: node_modules
+      - task: Cache@2
+        inputs:
+          key: npm-cache | "$(Agent.OS)" | package-lock.json
+          restoreKeys: npm-cache | "$(Agent.OS)"
+          path: ~/.npm
+      - script: |-
+          npm ci
+          npm run build -- --sha $(Build.SourceVersion)
+      - publish: dist
+        artifact: deploy-staging-build
+  - deployment: deploy_staging_deploy
+    displayName: Deploy
+    dependsOn: deploy_staging_build
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'))
+    timeoutInMinutes: '30'
+    pool:
+      vmImage: ubuntu-latest
+    container: node:20
+    environment: staging
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: none
+            - checkout: self
+              fetchDepth: '5'
+              lfs: 'true'
+            - script: ./deploy.sh

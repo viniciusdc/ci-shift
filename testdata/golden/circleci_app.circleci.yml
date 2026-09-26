@@ -1,0 +1,143 @@
+# Converted by cistela from circleci/app (CircleCI) to CircleCI.
+# Review before use; 5 item(s) need attention:
+#   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
+#   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
+#   - jobs.test.steps[3]: every matrix instance persists the same workspace paths, which CircleCI rejects as a conflict; persist per-instance directories
+#   - orbs: orb references were guessed as circleci/<name>@volatile; pin the real orbs and versions
+#   - workflows.scheduled: schedules were emitted as a legacy scheduled workflow; CircleCI recommends scheduled pipelines configured in the project settings
+
+version: 2.1
+orbs:
+  node: circleci/node@volatile
+jobs:
+  build:
+    docker:
+      - image: cimg/node:20.11
+      - image: postgres:16
+        name: db
+        environment:
+          POSTGRES_PASSWORD: example
+    environment:
+      NODE_ENV: test
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-deps-{{ checksum "package-lock.json" }}
+            - v1-deps-
+      - run: npm ci
+      - run:
+          name: Build
+          command: npm run build -- --sha ${CIRCLE_SHA1}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
+      - store_artifacts:
+          path: dist
+          destination: bundle
+      - save_cache:
+          key: v1-deps-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+  test:
+    parameters:
+      node:
+        type: string
+    docker:
+      - image: cimg/node:<< parameters.node >>
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          command: npm test
+          environment:
+            NODE_VERSION: << parameters.node >>
+      - persist_to_workspace:
+          root: .
+          paths:
+            - test-results
+      - store_artifacts:
+          path: test-results
+          destination: test-results
+      - run:
+          name: Upload coverage
+          command: ./upload.sh --token ${CODECOV_TOKEN}
+          when: always
+  deploy:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - node/install-packages:
+          pkg-manager: npm
+      - run: ./deploy.sh staging ${CIRCLE_BRANCH}
+  nightly-audit:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run: ./audit.sh
+workflows:
+  build-test-deploy:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+      - test:
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+          matrix:
+            parameters:
+              node: ['18', '20']
+      - hold-deploy:
+          type: approval
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+      - deploy:
+          requires:
+            - hold-deploy
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+  scheduled:
+    triggers:
+      - schedule:
+          cron: 0 3 * * *
+          filters:
+            branches:
+              only: main
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
+          matrix:
+            parameters:
+              node: ['18', '20']
+      - hold-deploy:
+          type: approval
+          requires:
+            - test
+      - deploy:
+          requires:
+            - hold-deploy
+      - nightly-audit

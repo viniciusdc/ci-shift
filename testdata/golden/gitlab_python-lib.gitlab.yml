@@ -1,0 +1,83 @@
+# Converted by cistela from gitlab/python-lib (GitLab CI/CD) to GitLab CI/CD.
+# Review before use.
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+stages:
+  - lint
+  - test
+  - build
+  - publish
+variables:
+  PIP_CACHE_DIR: ${CI_PROJECT_DIR}/.cache/pip
+  PYTHON_VERSION: '3.12'
+ruff:
+  stage: lint
+  image: python:3.12
+  needs: []
+  cache:
+    key:
+      files:
+        - requirements.txt
+      prefix: pip
+    paths:
+      - .cache/pip
+  script:
+    - python -m pip install --upgrade pip
+    - pip install ruff
+    - ruff check .
+pytest:
+  stage: test
+  image: python:${PY}
+  services:
+    - redis:7
+  needs:
+    - ruff
+  variables:
+    REDIS_URL: redis://redis:6379/0
+  cache:
+    key:
+      files:
+        - requirements.txt
+      prefix: pip
+    paths:
+      - .cache/pip
+  script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pytest --junitxml=report.xml
+  artifacts:
+    paths:
+      - report.xml
+    expire_in: 1 week
+    when: always
+  parallel:
+    matrix:
+      - PY: ['3.11', '3.12']
+build-wheel:
+  stage: build
+  image: python:3.12
+  needs:
+    - pytest
+  script:
+    - python -m pip install --upgrade pip
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/
+publish:
+  stage: publish
+  image: python:3.12
+  needs:
+    - build-wheel
+  script:
+    - python -m pip install --upgrade pip
+    - pip install twine
+    - twine upload -u __token__ -p "${PYPI_TOKEN}" dist/*
+  rules:
+    - if: $CI_COMMIT_TAG
+  environment: pypi

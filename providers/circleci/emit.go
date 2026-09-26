@@ -693,6 +693,7 @@ func tagPattern(t string) string {
 func (e *emitter) pushFilter() *filter {
 	f := &filter{}
 	t := e.p.Triggers
+	t.Schedules = t.CronSchedules(e.d, "schedules")
 	push := t.Push
 	if push == nil {
 		return f
@@ -798,6 +799,7 @@ func (e *emitter) excluded(skip func(*ir.Job) bool) map[string]bool {
 
 func (e *emitter) workflows() *yamlx.Map {
 	t := e.p.Triggers
+	t.Schedules = t.CronSchedules(e.d, "schedules")
 	wfs := yamlx.NewMap()
 	name := "main"
 	if e.p.Name != "" {

@@ -1,0 +1,245 @@
+# Converted by cistela from azure/multistage (Azure Pipelines) to CircleCI.
+# Review before use; 18 item(s) need attention:
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.test.steps[3]: task PublishTestResults@2 has no portable equivalent; it only converts back to Azure Pipelines
+#   - stages.Package.jobs.package.steps[3]: disabled step was dropped
+#   - stages.Deploy.jobs.release.strategy.runOnce.preDeploy: deployment lifecycle hook "preDeploy" is not portable and was dropped
+#   - stages.Deploy.jobs.release.steps[1]: step template "steps/notify.yml" is not resolved; convert it separately
+#   - stages.Deploy.jobs.notify.steps[1].condition: condition "and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))" could not be translated and was kept verbatim
+#   - jobs.test.steps[2]: every matrix instance persists the same workspace paths, which CircleCI rejects as a conflict; persist per-instance directories
+#   - jobs.test.steps[3]: azure step "PublishTestResults@2" has no CircleCI equivalent; a failing placeholder command was emitted
+#   - jobs.test: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.test: CircleCI cannot allow a job to fail; the job's failure fails the workflow
+#   - jobs.package: self-hosted runner labels [SelfHosted] became resource class "SelfHosted"; register a CircleCI self-hosted runner class (<namespace>/<name>)
+#   - jobs.notify.steps[2]: step condition could not be translated; the step always runs
+#   - workflows: pull request target branch and path filters are not supported by CircleCI and were dropped
+#   - workflows: CircleCI builds pull requests as branch builds; the push branch filters also skip pull requests from other branches
+#   - workflows: CircleCI ignores branches.ignore when branches.only is set; ignore filters were dropped
+#   - workflows: path filters need the circleci/path-filtering orb (dynamic configuration); they were dropped
+#   - workflows.scheduled: schedules were emitted as a legacy scheduled workflow; CircleCI recommends scheduled pipelines configured in the project settings
+
+version: 2.1
+jobs:
+  # Lint
+  Build_lint:
+    docker:
+      - image: node:20
+    environment:
+      buildConfiguration: Release
+      NODE_ENV: production
+      python_version: '3.12'
+      STAGE_VAR: build
+    steps:
+      - checkout
+      - run:
+          name: Checkout submodules
+          command: |-
+            git submodule sync
+            git submodule update --init --recursive
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - restore_cache:
+          keys:
+            - npm-{{ checksum "package-lock.json" }}
+            - npm-
+      - run:
+          name: Lint sources
+          command: |-
+            npm ci
+            npm run lint -- --config ${buildConfiguration}
+      - save_cache:
+          key: npm-{{ checksum "package-lock.json" }}
+          paths:
+            - $(Pipeline.Workspace)/.npm
+  test:
+    parameters:
+      imageName:
+        type: string
+      python_version:
+        type: string
+    docker:
+      - image: python:<< parameters.python_version >>
+      - image: postgres:16
+        name: postgres
+        environment:
+          POSTGRES_PASSWORD: ${DB_PASSWORD}
+    environment:
+      buildConfiguration: Release
+      NODE_ENV: production
+      python_version: '3.12'
+      STAGE_VAR: build
+    steps:
+      - checkout
+      - run:
+          command: |-
+            echo "sha ${CIRCLE_SHA1} on ${CIRCLE_BRANCH:-${CIRCLE_TAG}}"
+            echo "python << parameters.python_version >>"
+            pytest --junitxml=out/results.xml
+          working_directory: ${CIRCLE_WORKING_DIRECTORY}/tests
+          when: always
+      - persist_to_workspace:
+          root: .
+          paths:
+            - out
+          when: always
+      - store_artifacts:
+          path: out
+          destination: test-results
+          when: always
+      - run: 'echo "cistela: port azure step ''PublishTestResults@2'' manually" && exit 1'
+  package:
+    machine: true
+    resource_class: SelfHosted
+    environment:
+      buildConfiguration: Release
+      NODE_ENV: production
+      python_version: '3.12'
+    steps:
+      - attach_workspace:
+          at: .
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
+      - store_artifacts:
+          path: dist
+          destination: bundle
+  # lint
+  Package_lint:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      buildConfiguration: Release
+      NODE_ENV: production
+      python_version: '3.12'
+    steps:
+      - checkout
+      - run: echo package lint
+  # Release
+  release:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      buildConfiguration: Release
+      NODE_ENV: production
+      python_version: '3.12'
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          command: ./deploy.sh ${CIRCLE_BUILD_NUM}
+          environment:
+            TOKEN: ${DEPLOY_TOKEN}
+  notify:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      buildConfiguration: Release
+      NODE_ENV: production
+      python_version: '3.12'
+    steps:
+      - checkout
+      - run: echo "$(pwd)" notified
+      - run: echo weird
+workflows:
+  main:
+    jobs:
+      - Build_lint:
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+            tags:
+              only: /^v.*$/
+      - test:
+          requires:
+            - Build_lint
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+            tags:
+              only: /^v.*$/
+          matrix:
+            parameters:
+              imageName: [ubuntu-latest, macOS-latest]
+              python_version: ['3.11', '3.12']
+            exclude:
+              - imageName: ubuntu-latest
+                python_version: '3.12'
+              - imageName: macOS-latest
+                python_version: '3.11'
+      - package:
+          requires:
+            - Build_lint
+            - test
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*$/
+      - Package_lint:
+          requires:
+            - Build_lint
+            - test
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*$/
+      - release:
+          requires:
+            - package
+            - Package_lint
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v.*$/
+      - notify:
+          requires:
+            - release
+          filters:
+            branches:
+              only:
+                - main
+                - /^hotfix\/.*$/
+  scheduled:
+    triggers:
+      - schedule:
+          cron: 0 3 * * 1
+          filters:
+            branches:
+              only: main
+    jobs:
+      - Build_lint
+      - test:
+          requires:
+            - Build_lint
+          matrix:
+            parameters:
+              imageName: [ubuntu-latest, macOS-latest]
+              python_version: ['3.11', '3.12']
+            exclude:
+              - imageName: ubuntu-latest
+                python_version: '3.12'
+              - imageName: macOS-latest
+                python_version: '3.11'
+      - package:
+          requires:
+            - Build_lint
+            - test
+          filters:
+            branches:
+              only: main
+      - Package_lint:
+          requires:
+            - Build_lint
+            - test
+          filters:
+            branches:
+              only: main

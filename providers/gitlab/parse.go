@@ -361,15 +361,17 @@ func (ps *parser) parseJob(name string, n *yaml.Node) (*ir.Job, error) {
 	for _, c := range cacheList(ps.get(n, "cache")) {
 		j.Steps = append(j.Steps, &ir.Step{Kind: ir.StepCache, Cache: parseCache(c)})
 	}
-	if s := scriptOf(ps.get(n, "before_script")); s != "" {
+	for _, s := range scriptSteps(ps.get(n, "before_script")) {
 		j.Steps = append(j.Steps, &ir.Step{Kind: ir.StepRun, Run: s})
 	}
-	if s := scriptOf(yamlx.Get(n, "script")); s != "" {
+	main := scriptSteps(yamlx.Get(n, "script"))
+	for _, s := range main {
 		j.Steps = append(j.Steps, &ir.Step{Kind: ir.StepRun, Run: s})
-	} else if !yamlx.Has(n, "script") && !yamlx.Has(n, "run") {
+	}
+	if len(main) == 0 && !yamlx.Has(n, "run") {
 		d.Warnf(path, "job has no script")
 	}
-	if s := scriptOf(ps.get(n, "after_script")); s != "" {
+	for _, s := range scriptSteps(ps.get(n, "after_script")) {
 		j.Steps = append(j.Steps, &ir.Step{Kind: ir.StepRun, Run: s, If: &ir.Condition{When: ir.WhenAlways}, AllowFailure: true})
 	}
 	if a := yamlx.Get(n, "artifacts"); a != nil {
@@ -386,9 +388,7 @@ func (ps *parser) parseJob(name string, n *yaml.Node) (*ir.Job, error) {
 				Paths:    paths,
 				ExpireIn: yamlx.Str(yamlx.Get(a, "expire_in")),
 			}
-			if art.Name == "" || strings.Contains(art.Name, "$") {
-				art.Name = name
-			}
+			art.Name = fromGL(art.Name, false)
 			switch yamlx.Str(yamlx.Get(a, "when")) {
 			case "always":
 				art.When = ir.WhenAlways
@@ -409,12 +409,28 @@ func serviceAlias(image string) string {
 	return ir.Slug(name)
 }
 
-func scriptOf(n *yaml.Node) string {
-	lines := yamlx.StrList(n)
-	for i := range lines {
-		lines[i] = fromGL(strings.TrimRight(lines[i], "\n"), true)
+// scriptSteps groups script items into run steps: consecutive one-line
+// commands form one step, and every multi-line item is a step of its own.
+// This mirrors how the emitter lays steps out, so conversions are stable.
+func scriptSteps(n *yaml.Node) []string {
+	var steps, group []string
+	flush := func() {
+		if len(group) > 0 {
+			steps = append(steps, strings.Join(group, "\n"))
+			group = nil
+		}
 	}
-	return strings.Join(lines, "\n")
+	for _, item := range yamlx.StrList(n) {
+		item = fromGL(strings.TrimRight(item, "\n"), true)
+		if strings.Contains(item, "\n") {
+			flush()
+			steps = append(steps, item)
+			continue
+		}
+		group = append(group, item)
+	}
+	flush()
+	return steps
 }
 
 func cacheList(n *yaml.Node) []*yaml.Node {
@@ -521,7 +537,12 @@ func (ps *parser) addArtifactDownloads(p *ir.Pipeline, stagePos map[string]int) 
 	for _, j := range p.Jobs {
 		for _, st := range j.Steps {
 			if st.Kind == ir.StepUpload {
-				uploads[j.ID] = append(uploads[j.ID], st.Artifact.Name)
+				// Unnamed artifacts are known by their job, as emitters name them.
+				name := st.Artifact.Name
+				if name == "" {
+					name = ir.Slug(j.ID)
+				}
+				uploads[j.ID] = append(uploads[j.ID], name)
 			}
 		}
 	}
@@ -678,7 +699,7 @@ func (ps *parser) parseWorkflow(rules *yaml.Node) ir.Triggers {
 		}
 		if when == "never" {
 			for _, c := range clauses {
-				if c.varName == "CI_COMMIT_BRANCH" && c.op == "==" {
+				if c.varName == "CI_COMMIT_BRANCH" && (c.op == "==" || c.op == "=~") {
 					if b, ok := branchValue(c); ok {
 						push().BranchesIgnore = append(push().BranchesIgnore, b)
 					}
@@ -687,6 +708,7 @@ func (ps *parser) parseWorkflow(rules *yaml.Node) ir.Triggers {
 			continue
 		}
 		matched := false
+		isPR := false
 		for _, c := range clauses {
 			switch {
 			case c.varName == "CI_PIPELINE_SOURCE" && c.op == "==":
@@ -696,10 +718,13 @@ func (ps *parser) parseWorkflow(rules *yaml.Node) ir.Triggers {
 					if t.PullRequest == nil {
 						t.PullRequest = &ir.PRTrigger{}
 					}
+					isPR = true
 				case "push":
 					push()
 				case "schedule":
-					ps.d.Warnf(path, "GitLab schedules live in the project settings; add a cron schedule to the converted pipeline by hand")
+					// The cron lives in the project settings, not in the file.
+					t.Schedules = append(t.Schedules, ir.Schedule{})
+					ps.d.Warnf(path, "GitLab schedules live in the project settings; set the cron expression in the converted pipeline")
 				case "web", "api", "trigger":
 					t.Manual = true
 				default:
@@ -716,6 +741,13 @@ func (ps *parser) parseWorkflow(rules *yaml.Node) ir.Triggers {
 			case c.varName == "CI_COMMIT_TAG" && c.op == "set":
 				push().Tags = append(push().Tags, "*")
 				matched = true
+			case c.varName == "CI_COMMIT_TAG" && c.op == "=~":
+				if m := gitlabRegexLit.FindStringSubmatch(c.value); m != nil {
+					if g, ok := ir.RegexToGlob(m[1]); ok {
+						push().Tags = append(push().Tags, g)
+						matched = true
+					}
+				}
 			case c.varName == "CI_MERGE_REQUEST_TARGET_BRANCH_NAME":
 				if b, ok := branchValue(c); ok {
 					if t.PullRequest == nil {
@@ -729,12 +761,16 @@ func (ps *parser) parseWorkflow(rules *yaml.Node) ir.Triggers {
 		if !matched {
 			ps.d.Warnf(path, "workflow rule %q could not be translated", expr)
 		}
-		if ch := yamlx.Get(r, "changes"); ch != nil && t.Push != nil {
+		if ch := yamlx.Get(r, "changes"); ch != nil && matched {
 			paths := yamlx.StrList(ch)
 			if yamlx.IsMap(ch) {
 				paths = yamlx.StrList(yamlx.Get(ch, "paths"))
 			}
-			t.Push.Paths = append(t.Push.Paths, paths...)
+			if isPR {
+				t.PullRequest.Paths = ir.SortedUnique(append(t.PullRequest.Paths, paths...))
+			} else if t.Push != nil {
+				t.Push.Paths = ir.SortedUnique(append(t.Push.Paths, paths...))
+			}
 		}
 	}
 	if t.Empty() {

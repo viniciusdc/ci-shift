@@ -97,7 +97,9 @@ var shellVars = ir.NativeVars{
 }
 
 // builtinPrefixes are reserved variable prefixes on CircleCI.
-var builtinPrefixes = []string{"CIRCLE", "CIRCLECI"}
+// Other providers' reserved prefixes are included: their parsers leave
+// untranslatable built-ins in scripts, and those are not secrets either.
+var builtinPrefixes = []string{"CIRCLE", "CIRCLECI", "GITHUB_", "RUNNER_", "CI_", "GITLAB_", "BITBUCKET_"}
 
 // Composite native expressions for canonical values that have no single
 // CircleCI variable.

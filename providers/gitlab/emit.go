@@ -44,16 +44,8 @@ func (Provider) Emit(p *ir.Pipeline, d *ir.Diagnostics) ([]byte, error) {
 		root.Set("variables", vars)
 	}
 	for _, j := range p.Jobs {
-		comment := ""
-		if j.Name != "" && j.Name != names[j.ID] {
-			comment = j.Name
-		}
-		jm := emitJob(p, j, names, stageOf[j.ID], d)
-		if comment != "" {
-			root.Set(names[j.ID], yamlx.Comment{Text: comment, Value: jm})
-		} else {
-			root.Set(names[j.ID], jm)
-		}
+		// GitLab jobs have no display name; the key is the name.
+		root.Set(names[j.ID], emitJob(p, j, names, stageOf[j.ID], d))
 	}
 	return yamlx.Marshal(root, "")
 }
@@ -135,9 +127,13 @@ func emitWorkflow(p *ir.Pipeline, d *ir.Diagnostics) *yamlx.Map {
 	if len(t.Schedules) > 0 {
 		var crons []string
 		for _, s := range t.Schedules {
-			crons = append(crons, s.Cron)
+			if s.Cron != "" {
+				crons = append(crons, s.Cron)
+			}
 		}
-		d.Warnf("workflow", "create a pipeline schedule in GitLab (Build > Pipeline schedules) for cron %s", strings.Join(crons, ", "))
+		if len(crons) > 0 {
+			d.Warnf("workflow", "create a pipeline schedule in GitLab (Build > Pipeline schedules) for cron %s", strings.Join(crons, ", "))
+		}
 		rules = append(rules, rule(`$CI_PIPELINE_SOURCE == "schedule"`))
 	}
 	if t.Manual {
@@ -394,7 +390,7 @@ func scriptItems(st *ir.Step, where string, d *ir.Diagnostics) []string {
 	return []string{cmd}
 }
 
-var compoundRe = regexp.MustCompile(`(^|[\s;(])(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)(\s|;|$)|[{}]\s*$|<<|\\$`)
+var compoundRe = regexp.MustCompile(`(^|[\s;(])(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)(\s|;|$)|(^|[\s;])[{}]\s*$|^[{}]|<<|\\$`)
 
 // SplitCommands splits a script into one command per line when every line
 // is a self-contained command (no compound statements, heredocs, line

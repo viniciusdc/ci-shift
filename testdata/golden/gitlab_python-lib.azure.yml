@@ -1,0 +1,119 @@
+# Converted by cistela from gitlab/python-lib (GitLab CI/CD) to Azure Pipelines.
+# Review before use; 1 item(s) need attention:
+#   - stages.test.jobs.pytest: every matrix leg publishes the same artifact name; Azure requires unique names per run
+
+trigger:
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - '*'
+variables:
+  PIP_CACHE_DIR: $(Build.SourcesDirectory)/.cache/pip
+  PYTHON_VERSION: '3.12'
+resources:
+  containers:
+    - container: redis
+      image: redis:7
+stages:
+  - stage: lint
+    dependsOn: []
+    jobs:
+      - job: ruff
+        pool:
+          vmImage: ubuntu-latest
+        container: python:3.12
+        steps:
+          - checkout: self
+          - task: Cache@2
+            inputs:
+              key: pip | "$(Agent.OS)" | requirements.txt
+              restoreKeys: pip | "$(Agent.OS)"
+              path: .cache/pip
+          - script: python -m pip install --upgrade pip
+          - script: |-
+              pip install ruff
+              ruff check .
+  - stage: test
+    dependsOn:
+      - lint
+    jobs:
+      - job: pytest
+        pool:
+          vmImage: ubuntu-latest
+        container: $[ format('python:{0}', variables['PY']) ]
+        services:
+          redis: redis
+        variables:
+          REDIS_URL: redis://redis:6379/0
+        strategy:
+          matrix:
+            py_3_11:
+              PY: '3.11'
+            py_3_12:
+              PY: '3.12'
+        steps:
+          - checkout: self
+          - task: Cache@2
+            inputs:
+              key: pip | "$(Agent.OS)" | requirements.txt
+              restoreKeys: pip | "$(Agent.OS)"
+              path: .cache/pip
+          - script: python -m pip install --upgrade pip
+          - script: |-
+              pip install -r requirements.txt
+              pytest --junitxml=report.xml
+          - publish: report.xml
+            artifact: pytest
+            condition: always()
+  - stage: build
+    dependsOn:
+      - test
+    jobs:
+      - job: build_wheel
+        pool:
+          vmImage: ubuntu-latest
+        container: python:3.12
+        steps:
+          - checkout: self
+          - task: DownloadPipelineArtifact@2
+            displayName: Download pytest
+            inputs:
+              buildType: current
+              artifactName: pytest
+              targetPath: $(Build.SourcesDirectory)
+          - script: python -m pip install --upgrade pip
+          - script: |-
+              pip install build
+              python -m build
+          - publish: dist
+            artifact: build-wheel
+  - stage: publish
+    dependsOn:
+      - build
+    jobs:
+      - deployment: publish
+        condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+        pool:
+          vmImage: ubuntu-latest
+        container: python:3.12
+        environment: pypi
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+                - checkout: self
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download build-wheel
+                  inputs:
+                    buildType: current
+                    artifactName: build-wheel
+                    targetPath: $(Build.SourcesDirectory)/dist
+                - script: python -m pip install --upgrade pip
+                - script: |-
+                    pip install twine
+                    twine upload -u __token__ -p "${PYPI_TOKEN}" dist/*
+                  env:
+                    PYPI_TOKEN: $(PYPI_TOKEN)

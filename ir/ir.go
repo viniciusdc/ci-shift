@@ -64,7 +64,9 @@ type PRTrigger struct {
 	Paths    []string
 }
 
-// Schedule is a cron trigger (standard 5-field cron, UTC).
+// Schedule is a cron trigger (standard 5-field cron, UTC). An empty Cron
+// means the source defines the schedule outside the file (GitLab and
+// Bitbucket keep schedules in project settings); see CronSchedules.
 type Schedule struct {
 	Cron     string
 	Branches []string
@@ -286,4 +288,18 @@ func KVSet(kvs []KV, key, value string) []KV {
 		}
 	}
 	return append(kvs, KV{Key: key, Value: value})
+}
+
+// CronSchedules returns the schedules that carry a cron expression and
+// warns about those that do not, for emitters that need one.
+func (t Triggers) CronSchedules(d *Diagnostics, path string) []Schedule {
+	var out []Schedule
+	for _, s := range t.Schedules {
+		if s.Cron == "" {
+			d.Warnf(path, "the source schedules this pipeline outside the file; add the cron expression by hand")
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }

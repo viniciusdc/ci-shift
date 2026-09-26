@@ -670,56 +670,59 @@ func sameList(a, b []string) bool {
 	return true
 }
 
-// liftFilters turns per-job filters into job conditions, lifting filters
-// that every job shares into the push trigger.
+// liftFilters turns per-job filters into job conditions. The filter most
+// jobs share becomes the push trigger (the emitter applies the push
+// trigger to every job); jobs that deviate from it get their own condition.
 func liftFilters(p *ir.Pipeline, filters map[string]jobFilter, d *ir.Diagnostics, wpath string) {
 	if len(p.Jobs) == 0 || p.Triggers.Push == nil {
 		return
 	}
-	first := filters[p.Jobs[0].ID]
-	sharedOnly, sharedIgnore, allTagOnly := len(first.only) > 0, len(first.ignore) > 0, true
-	var tags []string
+	sig := func(f jobFilter) string {
+		return fmt.Sprintf("%q|%q|%q|%v|%q", f.only, f.ignore, f.tags, f.tagOnly, f.raw)
+	}
+	count := map[string]int{}
+	var base jobFilter
+	best := 0
 	for _, j := range p.Jobs {
 		f := filters[j.ID]
-		sharedOnly = sharedOnly && !f.tagOnly && sameList(f.only, first.only)
-		sharedIgnore = sharedIgnore && sameList(f.ignore, first.ignore)
-		allTagOnly = allTagOnly && f.tagOnly
-		tags = append(tags, f.tags...)
+		count[sig(f)]++
+		if f.raw == "" && count[sig(f)] > best {
+			best, base = count[sig(f)], f
+		}
 	}
 	push := p.Triggers.Push
-	if sharedOnly {
-		push.Branches = first.only
-	}
-	if sharedIgnore {
-		push.BranchesIgnore = first.ignore
-	}
-	push.Tags = uniq(tags)
-	if len(push.Tags) > 0 && !allTagOnly && len(push.Branches) == 0 {
+	push.Branches, push.BranchesIgnore = base.only, base.ignore
+	push.Tags = base.tags
+	if len(base.tags) > 0 && !base.tagOnly && len(push.Branches) == 0 {
 		// Branch builds stay enabled alongside the tag builds.
 		push.Branches = []string{"*"}
 	}
 	for _, j := range p.Jobs {
 		f := filters[j.ID]
+		if sig(f) == sig(base) {
+			continue
+		}
 		c := &ir.Condition{}
 		if j.If != nil {
 			c = j.If
 		}
+		where := wpath + "." + j.ID + ".filters"
 		switch {
 		case f.raw != "":
 			c.Raw, c.RawFrom = f.raw, "circleci"
-			d.Warnf(wpath+"."+j.ID+".filters", "expression filter %q could not be translated", f.raw)
-		case f.tagOnly && !allTagOnly:
+			d.Warnf(where, "expression filter %q could not be translated", f.raw)
+		case f.tagOnly:
 			c.Event = ir.EventTag
-		case !f.tagOnly:
-			if !sharedOnly && len(f.only) > 0 {
-				c.Branches = f.only
-			} else if len(push.Tags) > 0 && len(f.tags) == 0 {
-				// The job is filtered out of tag builds.
-				c.Branches = []string{"*"}
-			}
+		case sameList(f.only, base.only) && len(f.tags) == 0 && len(base.tags) > 0:
+			// The job is filtered out of tag builds.
+			c.Branches = []string{"*"}
+		case len(f.only) > 0:
+			c.Branches = f.only
+		default:
+			d.Warnf(where, "the job's filters differ from the other jobs' and could not be expressed; they were approximated")
 		}
-		if !sharedIgnore && len(f.ignore) > 0 {
-			d.Warnf(wpath+"."+j.ID+".filters", "per-job branch ignore filters are not portable and were dropped")
+		if !sameList(f.ignore, base.ignore) && len(f.ignore) > 0 && !f.tagOnly {
+			d.Warnf(where, "per-job branch ignore filters are not portable and were dropped")
 		}
 		if !c.IsZero() {
 			j.If = c
@@ -727,22 +730,10 @@ func liftFilters(p *ir.Pipeline, filters map[string]jobFilter, d *ir.Diagnostics
 	}
 }
 
-func uniq(in []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, s := range in {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
 // buildJob converts one job invocation.
 func (ps *parser) buildJob(id, key string, opts *yaml.Node, where string) *ir.Job {
 	d := ps.d
-	j := &ir.Job{ID: id}
+	j := &ir.Job{ID: id, Name: ps.jobComment(key)}
 	def := yamlx.Get(yamlx.Get(ps.root, "jobs"), key)
 	if def == nil {
 		if strings.Contains(key, "/") {
@@ -862,6 +853,25 @@ func (ps *parser) buildJob(id, key string, opts *yaml.Node, where string) *ir.Jo
 	return j
 }
 
+// jobComment returns the one-line comment above a job definition, where
+// the emitter writes the job's display name.
+func (ps *parser) jobComment(key string) string {
+	jobs := yamlx.Get(ps.root, "jobs")
+	if !yamlx.IsMap(jobs) {
+		return ""
+	}
+	for i := 0; i+1 < len(jobs.Content); i += 2 {
+		if jobs.Content[i].Value != key {
+			continue
+		}
+		c := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(jobs.Content[i].HeadComment), "#"))
+		if c != "" && !strings.Contains(c, "\n") {
+			return c
+		}
+	}
+	return ""
+}
+
 // execInfo collects executor settings that apply to steps.
 type execInfo struct {
 	workdir string
@@ -945,10 +955,17 @@ func (ps *parser) resourceClass(j *ir.Job, rc, where string) {
 		j.Runner.OS = ir.OSWindows
 	case strings.HasPrefix(rc, "macos."):
 		j.Runner.OS = ir.OSMacOS
-	default:
+	case cloudClassRe.MatchString(rc) || strings.Contains(rc, "<<"):
 		ps.d.Infof(where+".resource_class", "resource class %q was dropped", rc)
+	default:
+		// Not a CircleCI cloud class: a runner label from another CI.
+		j.Runner.Labels = []string{rc}
+		ps.d.Infof(where+".resource_class", "resource class %q was kept as a runner label", rc)
 	}
 }
+
+// cloudClassRe matches CircleCI's cloud resource classes.
+var cloudClassRe = regexp.MustCompile(`^(small|medium\+?|large|xlarge|2xlarge\+?)(\.gen2)?$|^(arm|gpu|m4pro)\.`)
 
 func isDefaultWorkdir(wd string) bool {
 	switch strings.TrimSuffix(wd, "/") {
@@ -1227,6 +1244,10 @@ func mergeArtifact(steps []*ir.Step, p, name string) bool {
 			continue
 		}
 		for _, q := range st.Artifact.Paths {
+			// The emitter widens patterns to their directory for store_artifacts.
+			if i := strings.IndexAny(q, "*?["); i >= 0 && path.Dir(q[:i]+"x") == path.Clean(p) {
+				q = p
+			}
 			if path.Clean(q) == path.Clean(p) {
 				if st.Artifact.Name == "" {
 					st.Artifact.Name = name

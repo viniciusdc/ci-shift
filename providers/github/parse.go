@@ -341,6 +341,10 @@ func parseStep(n *yaml.Node, path string, d *ir.Diagnostics) (*ir.Step, error) {
 	case "actions/download-artifact":
 		st.Kind = ir.StepDownload
 		st.Artifact = &ir.Artifact{Name: w("name")}
+		if st.Artifact.Name == "" {
+			// Matrix uploads are fetched with pattern: <name>-*.
+			st.Artifact.Name = strings.TrimSuffix(strings.TrimSuffix(w("pattern"), "*"), "-")
+		}
 		return st, nil
 	}
 	st.Kind = ir.StepAction

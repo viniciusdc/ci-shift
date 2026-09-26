@@ -1,0 +1,79 @@
+# Converted by cistela from circleci/app (CircleCI) to GitLab CI/CD.
+# Review before use; 4 item(s) need attention:
+#   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
+#   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
+#   - workflow: create a pipeline schedule in GitLab (Build > Pipeline schedules) for cron 0 3 * * *
+#   - deploy.steps[2]: circleci step "node/install-packages" has no GitLab equivalent; a failing placeholder command was emitted
+
+workflow:
+  name: build-test-deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*$/
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+stages:
+  - stage-1
+  - test
+  - deploy
+build:
+  stage: stage-1
+  image: cimg/node:20.11
+  services:
+    - name: postgres:16
+      alias: db
+      variables:
+        POSTGRES_PASSWORD: example
+  needs: []
+  variables:
+    NODE_ENV: test
+  cache:
+    key:
+      files:
+        - package-lock.json
+      prefix: v1-deps
+    paths:
+      - ~/.npm
+  script:
+    - npm ci
+    - npm run build -- --sha ${CI_COMMIT_SHA}
+  artifacts:
+    name: bundle
+    paths:
+      - dist
+test:
+  stage: test
+  image: cimg/node:${node}
+  needs:
+    - build
+  script:
+    - |-
+      (
+        export NODE_VERSION="${node}"
+        npm test
+      )
+  after_script:
+    - ./upload.sh --token ${CODECOV_TOKEN}
+  artifacts:
+    name: test-results
+    paths:
+      - test-results
+  parallel:
+    matrix:
+      - node: ['18', '20']
+deploy:
+  stage: deploy
+  needs:
+    - test
+  script:
+    - 'echo "cistela: port circleci step ''node/install-packages'' manually" && exit 1'
+    - ./deploy.sh staging ${CI_COMMIT_BRANCH}
+  rules:
+    - when: manual
+nightly-audit:
+  stage: stage-1
+  image: cimg/base:stable
+  needs: []
+  script:
+    - ./audit.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

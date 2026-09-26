@@ -1,0 +1,131 @@
+# Converted by cistela from gitlab/python-lib (GitLab CI/CD) to CircleCI.
+# Review before use; 2 item(s) need attention:
+#   - jobs.pytest.steps[4]: every matrix instance persists the same workspace paths, which CircleCI rejects as a conflict; persist per-instance directories
+#   - workflows: CircleCI builds pull requests as branch builds; the push branch filters also skip pull requests from other branches
+
+version: 2.1
+jobs:
+  ruff:
+    docker:
+      - image: python:3.12
+    environment:
+      PIP_CACHE_DIR: ${CIRCLE_WORKING_DIRECTORY}/.cache/pip
+      PYTHON_VERSION: '3.12'
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - pip-{{ checksum "requirements.txt" }}
+            - pip-
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install ruff
+          ruff check .
+      - save_cache:
+          key: pip-{{ checksum "requirements.txt" }}
+          paths:
+            - .cache/pip
+  pytest:
+    parameters:
+      PY:
+        type: string
+    docker:
+      - image: python:<< parameters.PY >>
+      - image: redis:7
+        name: redis
+    environment:
+      PIP_CACHE_DIR: ${CIRCLE_WORKING_DIRECTORY}/.cache/pip
+      PYTHON_VERSION: '3.12'
+      REDIS_URL: redis://redis:6379/0
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - pip-{{ checksum "requirements.txt" }}
+            - pip-
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install -r requirements.txt
+          pytest --junitxml=report.xml
+      - persist_to_workspace:
+          root: .
+          paths:
+            - report.xml
+          when: always
+      - store_artifacts:
+          path: report.xml
+          when: always
+      - save_cache:
+          key: pip-{{ checksum "requirements.txt" }}
+          paths:
+            - .cache/pip
+  build-wheel:
+    docker:
+      - image: python:3.12
+    environment:
+      PIP_CACHE_DIR: ${CIRCLE_WORKING_DIRECTORY}/.cache/pip
+      PYTHON_VERSION: '3.12'
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install build
+          python -m build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist/
+      - store_artifacts:
+          path: dist/
+  publish:
+    docker:
+      - image: python:3.12
+    environment:
+      PIP_CACHE_DIR: ${CIRCLE_WORKING_DIRECTORY}/.cache/pip
+      PYTHON_VERSION: '3.12'
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install twine
+          twine upload -u __token__ -p "${PYPI_TOKEN}" dist/*
+workflows:
+  main:
+    jobs:
+      - ruff:
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /.*/
+      - pytest:
+          requires:
+            - ruff
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /.*/
+          matrix:
+            parameters:
+              PY: ['3.11', '3.12']
+      - build-wheel:
+          requires:
+            - pytest
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /.*/
+      - publish:
+          requires:
+            - build-wheel
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/

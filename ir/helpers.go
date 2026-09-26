@@ -45,14 +45,22 @@ var commonEnv = map[string]bool{
 	"XDG_CONFIG_HOME": true, "GOCACHE": true, "GOFLAGS": true, "npm_config_cache": true,
 }
 
+// builtinPrefixes are variable prefixes reserved by the supported CI
+// providers; such variables are never secrets, whatever the source.
+var builtinPrefixes = []string{
+	"CI_", "GITLAB_", "GITHUB_", "RUNNER_", "CIRCLE_", "CIRCLECI", "BITBUCKET_",
+	"BUILD_", "SYSTEM_", "AGENT_", "PIPELINE_", "TF_BUILD", "ACTIONS_",
+}
+
 var upperRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
 // PromoteExternalVars turns $NAME references to variables that are defined
 // nowhere in the pipeline (typically project-level CI/CD variables holding
 // credentials) into ${{ secret.NAME }} references, so emitters for
 // providers that require explicit secret mapping can wire them up.
-// builtinPrefixes lists the source provider's reserved variable prefixes.
-func PromoteExternalVars(p *Pipeline, d *Diagnostics, builtinPrefixes ...string) {
+// extraPrefixes adds reserved prefixes beyond those of the supported
+// providers.
+func PromoteExternalVars(p *Pipeline, d *Diagnostics, extraPrefixes ...string) {
 	defined := map[string]bool{}
 	for _, kv := range p.Env {
 		defined[kv.Key] = true
@@ -62,9 +70,11 @@ func PromoteExternalVars(p *Pipeline, d *Diagnostics, builtinPrefixes ...string)
 		if defined[name] || local[name] || commonEnv[name] || !upperRe.MatchString(name) {
 			return false
 		}
-		for _, pre := range builtinPrefixes {
-			if strings.HasPrefix(name, pre) {
-				return false
+		for _, list := range [][]string{builtinPrefixes, extraPrefixes} {
+			for _, pre := range list {
+				if strings.HasPrefix(name, pre) {
+					return false
+				}
 			}
 		}
 		return true

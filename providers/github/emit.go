@@ -54,6 +54,7 @@ func emitEnv(kvs []ir.KV, script bool) *yamlx.Map {
 }
 
 func emitOn(t ir.Triggers, d *ir.Diagnostics) any {
+	t.Schedules = t.CronSchedules(d, "on.schedule")
 	if t.Empty() {
 		t.Push = &ir.PushTrigger{}
 		t.PullRequest = &ir.PRTrigger{}
@@ -116,14 +117,24 @@ func nilIfEmpty(m *yamlx.Map) any {
 
 func runsOn(r ir.Runner, d *ir.Diagnostics, path string) any {
 	if len(r.Labels) > 0 {
+		// Always name the OS label: the parser folds it into Runner.OS.
 		labels := []string{"self-hosted"}
 		switch r.OS {
 		case ir.OSWindows:
 			labels = append(labels, "windows")
 		case ir.OSMacOS:
 			labels = append(labels, "macOS")
+		default:
+			labels = append(labels, "linux")
 		}
-		return append(labels, r.Labels...)
+		for _, l := range r.Labels {
+			switch strings.ToLower(l) {
+			case "self-hosted", "linux", "windows", "macos":
+				continue
+			}
+			labels = append(labels, l)
+		}
+		return labels
 	}
 	if img := strings.ToLower(r.VMImage); img != "" {
 		if strings.Contains(img, "${{") {
@@ -164,14 +175,11 @@ func emitJob(p *ir.Pipeline, j *ir.Job, ids map[string]string, d *ir.Diagnostics
 	if cond := emitIf(j.If, d, path); cond != "" {
 		m.Set("if", cond)
 	}
+	m.Set("runs-on", runsOn(j.Runner, d, path))
 	if j.If != nil && j.If.Manual {
 		d.Warnf(path, "manual approval gates map to GitHub environments with required reviewers; configure one for environment %q", envOrDefault(j))
-		if j.Environment == "" {
-			m.Set("environment", envOrDefault(j))
-		}
-	}
-	m.Set("runs-on", runsOn(j.Runner, d, path))
-	if j.Environment != "" {
+		m.Set("environment", envOrDefault(j))
+	} else if j.Environment != "" {
 		m.Set("environment", j.Environment)
 	}
 	if j.Image != "" {
@@ -471,6 +479,14 @@ func artifactName(a *ir.Artifact, j *ir.Job) string {
 	return ir.Slug(j.ID)
 }
 
+// matrixBase strips a "-${{ matrix.* }}" suffix from an artifact name.
+func matrixBase(name string) string {
+	if i := strings.Index(name, "-${{ matrix."); i > 0 {
+		return name[:i]
+	}
+	return name
+}
+
 // uploadName makes artifact names unique per matrix combination, since
 // upload-artifact@v4 refuses to upload the same name twice in a run.
 func uploadName(a *ir.Artifact, j *ir.Job) string {
@@ -500,7 +516,7 @@ func emitDownloads(p *ir.Pipeline, j *ir.Job, st *ir.Step, base *yamlx.Map, d *i
 				continue
 			}
 			name := artifactName(s.Artifact, dep)
-			if st.Artifact.Name != "" && st.Artifact.Name != name {
+			if want := st.Artifact.Name; want != "" && want != name && want != matrixBase(name) {
 				continue
 			}
 			sources = append(sources, src{name: name, pattern: dep.Matrix != nil, dir: commonDir(s.Artifact.Paths)})

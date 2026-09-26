@@ -1,0 +1,103 @@
+# Converted by cistela from circleci/app (CircleCI) to Azure Pipelines.
+# Review before use; 6 item(s) need attention:
+#   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
+#   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
+#   - jobs.build.steps[1]: Cache@2 does not expand ~ in "~/.npm"; use an absolute path such as $(Pipeline.Workspace)/...
+#   - jobs.test: every matrix leg publishes the same artifact name; Azure requires unique names per run
+#   - jobs.deploy: manual approval gates map to Azure environments with approval checks; give the job an environment and configure one
+#   - jobs.deploy.steps[2]: circleci step "node/install-packages" has no Azure Pipelines equivalent; a failing placeholder step was emitted
+
+trigger:
+  - main
+  - release/*
+pr: none
+schedules:
+  - cron: 0 3 * * *
+    branches:
+      include:
+        - main
+    always: 'true'
+resources:
+  containers:
+    - container: db
+      image: postgres:16
+      env:
+        POSTGRES_PASSWORD: example
+jobs:
+  - job: build
+    pool:
+      vmImage: ubuntu-latest
+    container: cimg/node:20.11
+    services:
+      db: db
+    variables:
+      NODE_ENV: test
+    steps:
+      - checkout: self
+      - task: Cache@2
+        inputs:
+          key: v1-deps | "$(Agent.OS)" | package-lock.json
+          restoreKeys: v1-deps | "$(Agent.OS)"
+          path: ~/.npm
+      - script: npm ci
+      - script: npm run build -- --sha $(Build.SourceVersion)
+        displayName: Build
+      - publish: dist
+        artifact: bundle
+  - job: test
+    dependsOn: build
+    pool:
+      vmImage: ubuntu-latest
+    container: $[ format('cimg/node:{0}', variables['node']) ]
+    strategy:
+      matrix:
+        node_18:
+          node: '18'
+        node_20:
+          node: '20'
+    steps:
+      - checkout: self
+      - task: DownloadPipelineArtifact@2
+        displayName: Download bundle
+        inputs:
+          buildType: current
+          artifactName: bundle
+          targetPath: $(Build.SourcesDirectory)/dist
+      - script: npm test
+        env:
+          NODE_VERSION: $(node)
+      - publish: test-results
+        artifact: test-results
+      - script: ./upload.sh --token ${CODECOV_TOKEN}
+        displayName: Upload coverage
+        condition: always()
+        env:
+          CODECOV_TOKEN: $(CODECOV_TOKEN)
+  - job: deploy
+    dependsOn: test
+    pool:
+      vmImage: ubuntu-2204:current
+    steps:
+      - checkout: self
+      - task: DownloadPipelineArtifact@2
+        displayName: Download test-results
+        inputs:
+          buildType: current
+          artifactName: test-results
+          targetPath: $(Build.SourcesDirectory)/test-results
+      - task: DownloadPipelineArtifact@2
+        displayName: Download bundle
+        inputs:
+          buildType: current
+          artifactName: bundle
+          targetPath: $(Build.SourcesDirectory)/dist
+      - script: 'echo "##vso[task.logissue type=error]cistela: port circleci step ''node/install-packages'' manually" && exit 1'
+      - script: ./deploy.sh staging $(Build.SourceBranchName)
+  - job: nightly_audit
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'Schedule'))
+    pool:
+      vmImage: ubuntu-latest
+    container: cimg/base:stable
+    steps:
+      - checkout: self
+      - script: ./audit.sh

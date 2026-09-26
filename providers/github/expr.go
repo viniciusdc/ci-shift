@@ -58,6 +58,13 @@ var contextToCanon = map[string]string{
 	"github.event.repository.default_branch": ir.VarDefaultBr,
 }
 
+// branchIdiom recognizes the shell spelling of "branch name, also for
+// pull requests" that toGH emits for ${{ ci.branch }}.
+var branchIdiom = strings.NewReplacer(
+	"${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}", ir.Ref(ir.RefCI, ir.VarBranch),
+	"${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}", ir.Ref(ir.RefCI, ir.VarBranch),
+)
+
 var ghExprRe = regexp.MustCompile(`\$\{\{\s*(.*?)\s*\}\}`)
 var identRe = regexp.MustCompile(`^(secrets|env|matrix|vars)\.([A-Za-z_][A-Za-z0-9_\-]*)$`)
 
@@ -84,6 +91,7 @@ func fromGH(s string) string {
 		}
 		return m
 	})
+	s = branchIdiom.Replace(s)
 	return shellVars.FromShell(s)
 }
 
@@ -95,8 +103,11 @@ func toGH(s string, script bool) string {
 		switch kind {
 		case ir.RefCI:
 			if script {
-				if name == ir.VarBranch {
-					return "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+				switch name {
+				case ir.VarBranch:
+					return "${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+				case ir.VarTag:
+					return "${GITHUB_REF_NAME}"
 				}
 				if v, ok := shellVars.Lookup(name); ok {
 					return "${" + v + "}"

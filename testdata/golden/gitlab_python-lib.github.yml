@@ -1,0 +1,96 @@
+# Converted by cistela from gitlab/python-lib (GitLab CI/CD) to GitHub Actions.
+# Review before use.
+
+name: CI
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '**'
+  pull_request:
+env:
+  PIP_CACHE_DIR: ${{ github.workspace }}/.cache/pip
+  PYTHON_VERSION: '3.12'
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    container: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install ruff
+          ruff check .
+  pytest:
+    needs: ruff
+    runs-on: ubuntu-latest
+    container: python:${{ matrix.PY }}
+    services:
+      redis:
+        image: redis:7
+    strategy:
+      matrix:
+        PY: ['3.11', '3.12']
+    env:
+      REDIS_URL: redis://redis:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install -r requirements.txt
+          pytest --junitxml=report.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-${{ matrix.PY }}
+          path: report.xml
+          retention-days: 7
+  build-wheel:
+    needs: pytest
+    runs-on: ubuntu-latest
+    container: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pytest
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pytest-*
+          merge-multiple: true
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install build
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-wheel
+          path: dist/
+  publish:
+    needs: build-wheel
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    environment: pypi
+    container: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download build-wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: build-wheel
+          path: dist
+      - run: python -m pip install --upgrade pip
+      - run: |-
+          pip install twine
+          twine upload -u __token__ -p "${PYPI_TOKEN}" dist/*
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
