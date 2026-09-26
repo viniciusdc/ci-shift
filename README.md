@@ -1,8 +1,21 @@
-# ci-shift
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+    <img src="docs/assets/banner-dark.svg" alt="ci-shift — shift CI/CD pipelines between providers" width="860"/>
+  </picture>
 
-**Shift CI/CD pipelines between providers.** `cishift` translates pipeline
-configurations from one CI provider to another and checks them against each
-provider's official JSON schema.
+  <p><b>Translate CI/CD pipelines between GitHub, GitLab, CircleCI, Azure and Bitbucket, and check them against each provider's schema.</b></p>
+
+  [![CI](https://github.com/viniciusdc/ci-shift/actions/workflows/ci.yaml/badge.svg)](https://github.com/viniciusdc/ci-shift/actions/workflows/ci.yaml)
+  [![Go version](https://img.shields.io/github/go-mod/go-version/viniciusdc/ci-shift?logo=go&logoColor=white)](go.mod)
+  [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+  [![Release](https://img.shields.io/github/v/release/viniciusdc/ci-shift?include_prereleases&sort=semver)](https://github.com/viniciusdc/ci-shift/releases)
+
+</div>
+
+`cishift` translates pipeline configurations from one CI provider to another
+and checks them against each provider's official JSON schema.
 
 | Provider | Name | Default file |
 |---|---|---|
@@ -12,15 +25,20 @@ provider's official JSON schema.
 | Azure Pipelines | `azure` | `azure-pipelines.yml` |
 | Bitbucket Pipelines | `bitbucket` | `bitbucket-pipelines.yml` |
 
-Every provider converts to and from every other one. Instead of writing
-converters for each pair, each provider has a parser into a shared pipeline
-model (`ir`) and an emitter back out of it:
+## How it works
 
-```
- .gitlab-ci.yml ──parse──┐                ┌──emit──► .github/workflows/ci.yml
- .circleci/config.yml ───┼──► ir.Pipeline ┼──────► azure-pipelines.yml
- bitbucket-pipelines.yml ┘                └──────► ...
-```
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/how-it-works-dark.svg">
+  <img src="docs/assets/diagrams/how-it-works-light.svg" alt="Every provider parses into ir.Pipeline and emits out of it" width="1000">
+</picture>
+</div>
+
+Every provider converts to and from every other one. Instead of writing a
+converter for each pair, each provider has a parser into a shared pipeline
+model (`ir.Pipeline`) and an emitter back out of it. The source provider is
+detected from the file unless you pass `--from`. See
+[docs/translation.md](docs/translation.md) for what the model carries.
 
 ## Install
 
@@ -34,8 +52,20 @@ cishift version --check   # is there a newer release?
 
 ## Usage
 
+Give a file and a target; the source provider is detected:
+
+<!-- gendocs:example:convert-gitlab-to-github -->
+<div align="center">
+<a href="testdata/examples/convert-gitlab-to-github.txtar"><picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/examples/convert-gitlab-to-github-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/examples/convert-gitlab-to-github-light.svg">
+  <img src="docs/assets/examples/convert-gitlab-to-github-dark.svg" alt="cishift convert gitlab to github example" />
+</picture></a>
+</div>
+<!-- /gendocs:example:convert-gitlab-to-github -->
+
 ```bash
-# Convert: give a file and a target (the source provider is detected)
+# Write the result to a file (and record it in .cishift.lock)
 cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
 
 # Check the result against the target schema; fail on lossy conversions
@@ -43,13 +73,6 @@ cishift .circleci/config.yml --to azure --check --strict
 
 # Read from stdin
 cat bitbucket-pipelines.yml | cishift - --from bitbucket --to gitlab
-
-# Check files against their provider schema
-cishift check .github/workflows/*.yml
-cishift check --latest .gitlab-ci.yml   # download the newest schemas first
-
-# Which provider is this file for?
-cishift detect some-pipeline.yml
 
 cishift providers
 ```
@@ -61,49 +84,80 @@ Converted files start with a comment header naming the source. It also lists
 every **warning**: anything ci-shift dropped or approximated, such as a
 GitHub Marketplace action with no equivalent, or a GitLab `rules:changes`.
 Warnings also go to stderr. `--strict` turns them into a non-zero exit code,
-which is useful in CI.
+which is useful in CI:
+
+<!-- gendocs:example:warnings-and-strict -->
+<div align="center">
+<a href="testdata/examples/warnings-and-strict.txtar"><picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/examples/warnings-and-strict-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/examples/warnings-and-strict-light.svg">
+  <img src="docs/assets/examples/warnings-and-strict-dark.svg" alt="cishift warnings and strict example" />
+</picture></a>
+</div>
+<!-- /gendocs:example:warnings-and-strict -->
 
 Steps that cannot be translated, such as third-party GitHub actions,
 CircleCI orbs, Azure tasks or Bitbucket pipes, become a **failing
 placeholder step**. A converted pipeline therefore never silently skips
 work.
 
-## Keeping generated files in sync
+### Checking and detecting
 
-Writing a file with `-o` records how it was produced in `.cishift.lock`.
-cishift uses the nearest `.cishift.lock` in the current directory or its
-parents, or creates one at the root of the git repository. Commit it. The generated pipelines stay untouched; all
-the provenance lives in the lockfile:
+`cishift check` validates files against their provider's schema, detecting
+the provider unless you pass `--provider`, and exits 1 when any file is
+invalid:
 
-```yaml
-version: 1
-generated:
-  - output: .github/workflows/ci.yml
-    source: .gitlab-ci.yml
-    from: gitlab
-    to: github
-    cishift: v0.4.0
-    schema: github@sha256:d10c9f4656e1
-    source_sha256: sha256:e786…
-    output_sha256: sha256:f672…
-```
+<!-- gendocs:example:check -->
+<div align="center">
+<a href="testdata/examples/check.txtar"><picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/examples/check-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/examples/check-light.svg">
+  <img src="docs/assets/examples/check-dark.svg" alt="cishift check example" />
+</picture></a>
+</div>
+<!-- /gendocs:example:check -->
 
 ```bash
-cishift verify   # offline check of every recorded file; exits 1 on problems
-cishift sync     # regenerate them all (add --force to overwrite hand edits)
+cishift check .github/workflows/*.yml
+cishift check --latest .gitlab-ci.yml   # download the newest schemas first
 ```
 
-`verify` reports four kinds of problem:
-- an output is missing;
-- an output was **edited by hand** since it was generated;
-- its **source changed**;
-- the installed cishift would now **generate it differently**, e.g. after an
-  upgrade.
+`cishift detect` prints which provider a file is for, whatever its name:
+
+<!-- gendocs:example:detect -->
+<div align="center">
+<a href="testdata/examples/detect.txtar"><picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/examples/detect-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/examples/detect-light.svg">
+  <img src="docs/assets/examples/detect-dark.svg" alt="cishift detect example" />
+</picture></a>
+</div>
+<!-- /gendocs:example:detect -->
+
+## Keeping generated files in sync
+
+Writing a file with `-o` records how it was produced in `.cishift.lock`:
+source, providers, cishift version, schema snapshot and content hashes.
+Commit it. `cishift verify` then checks every recorded file offline and
+fails when an output is missing or was edited by hand, when its source
+changed, or when the installed cishift would now generate it differently.
+`cishift sync` regenerates them, and refuses to overwrite hand edits unless
+you pass `--force`:
+
+<!-- gendocs:example:lockfile -->
+<div align="center">
+<a href="testdata/examples/lockfile.txtar"><picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/examples/lockfile-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/examples/lockfile-light.svg">
+  <img src="docs/assets/examples/lockfile-dark.svg" alt="cishift lockfile example" />
+</picture></a>
+</div>
+<!-- /gendocs:example:lockfile -->
 
 That makes `cishift verify` a good CI step when a repository keeps pipelines
-for several providers generated from one source. Regenerating a file that
-was edited by hand is refused unless you pass `--force`, and `--no-lock`
-skips recording a file.
+for several providers generated from one source. `--no-lock` skips recording
+a file. The lockfile format and the lookup rules are in
+[docs/lockfile.md](docs/lockfile.md).
 
 ## Schemas
 
@@ -123,24 +177,12 @@ command goes online, except `version --check`.
 
 ## What gets translated
 
-| Concept | Notes |
-|---|---|
-| Triggers | push branches/tags/paths, pull requests, schedules, manual runs |
-| Jobs and dependencies | GitLab stages and Bitbucket sequences become an explicit dependency graph and back |
-| Runners and images | hosted OS images, self-hosted labels, job containers |
-| Services | sidecar containers (databases, caches) |
-| Matrices | cartesian axes, include/exclude, GitLab `parallel:matrix`, Azure legs |
-| Steps | scripts (env, working directory, shell), checkout options |
-| Tool setup | `setup-node`/`UseNode@1`/..., folded into container images where the provider is container-based |
-| Caches | key prefix + lockfile hashing (`hashFiles`, `checksum`, `key:files`, `Cache@2`) |
-| Artifacts | upload/download between jobs (workspaces on CircleCI, automatic passing on GitLab/Bitbucket) |
-| Conditions | branch/tag/event filters, `always()`/`failure()`, manual approval |
-| Variables | pipeline/job env, secrets, and well-known CI variables (`$CI_COMMIT_SHA` ⇄ `${{ github.sha }}` ⇄ `$CIRCLE_SHA1` ⇄ `$(Build.SourceVersion)` ⇄ `$BITBUCKET_COMMIT`) |
-
-Variables that a pipeline references but never defines (e.g. `$PYPI_TOKEN`
-from GitLab project settings) are treated as secrets. On GitHub and Azure
-they are mapped into each step's `env`, since those providers do not
-expose secrets automatically.
+Triggers, jobs and their dependencies, runners and images, services,
+matrices, steps, tool setup, caches, artifacts, conditions and variables,
+including secrets and well-known CI variables such as `$CI_COMMIT_SHA` ⇄
+`${{ github.sha }}` ⇄ `$CIRCLE_SHA1`. Variables that a pipeline references
+but never defines are treated as secrets. The full table, with how each
+concept maps between providers, is in [docs/translation.md](docs/translation.md).
 
 ### Known limits
 
@@ -167,28 +209,28 @@ res, err := convert.Convert(data, from, to, convert.Options{Header: true})
 issues, err := schema.Validate("github", res.Output, schema.Options{})
 ```
 
-## Project layout
+## CLI reference
 
-```
-ir/             provider-neutral pipeline model, expressions, graph helpers
-providers/*/    one parser + emitter per provider
-convert/        provider registry, detection, conversion
-schema/         JSON schema validation (embedded snapshots in schema/snapshots)
-internal/cli/   cobra commands
-internal/lockfile/  .cishift.lock reading and writing
-cmd/cishift/    the cishift binary
-internal/yamlx/ order-preserving YAML read/write helpers
-testdata/       sample pipelines and golden conversion outputs
-```
+Every command and flag is listed in [docs/CLI.md](docs/CLI.md), generated
+from the live `--help` output.
 
 ## Development
 
 ```bash
-make test      # unit, round-trip, cross-provider golden and schema tests
-make lint      # golangci-lint
-make golden    # regenerate golden outputs after an intentional change
-make schemas   # refresh the schema snapshots built into the binary
+make test       # unit, round-trip, cross-provider golden, schema and example tests
+make lint       # golangci-lint
+make golden     # regenerate golden outputs after an intentional change
+make schemas    # refresh the schema snapshots built into the binary
+make generate   # regenerate the banner, diagram, CLI reference, layout and examples
 ```
+
+The examples in this README are `testdata/examples/*.txtar` scripts: `go
+test` runs them against the built binary, and `make examples` renders them
+into the images above (install [freeze](https://github.com/charmbracelet/freeze)
+with `make install-tools`). The generators in `internal/tools/gen*` come from
+the [docsmith](https://github.com/viniciusdc/docsmith) template and read
+`docsmith.toml`; the Drift workflow fails when generated docs are out of
+date.
 
 Releases are cut by pushing a tag (`git tag v0.1.0 && git push --tags`):
 the release workflow runs the tests and publishes binaries with GoReleaser.
@@ -196,6 +238,41 @@ the release workflow runs the tests and publishes binaries with GoReleaser.
 Adding a provider means implementing `ir.Provider` (`Parse`, `Emit`,
 `Detect`) in `providers/<name>`, registering it in `convert/convert.go`,
 and adding its schema URL to `schema/schema.go`.
+
+## Project layout
+
+<!-- gendocs:layout -->
+```
+Makefile            Build, test, lint, schema and docs targets
+cmd/                Executable entry points
+  cishift/          cishift translates CI/CD pipelines between providers
+convert/            convert wires the providers together: detection, parsing, emitting and…
+docs/               CLI reference, lockfile and translation guides
+  diagrams/         Diagram sources (TOML) for gendiagram
+docsmith.toml       Configuration for the docs generators
+go.mod              Module github.com/viniciusdc/ci-shift
+internal/           Packages private to this module
+  buildinfo/        buildinfo reports the version of the running cishift binary
+  cli/              cli implements the cishift command line
+  lockfile/         lockfile records which pipeline files cishift generated, from what, and…
+  tools/            Maintenance commands, run through make
+    genbanner/      Generates the README banner SVGs from docsmith.toml
+    gendiagram/     Generates architecture diagram SVGs from TOML definitions
+    gendocs/        Generates the CLI reference and project layout sections of the docs
+    genexamples/    Generates executable documentation snippets
+    updateschemas/  updateschemas refreshes the schema snapshots embedded in the schema…
+  yamlx/            yamlx provides small helpers for reading YAML documents in an…
+ir/                 ir defines ci-shift's provider-neutral pipeline model
+providers/          One parser + emitter per CI provider
+  azure/            azure converts Azure Pipelines YAML definitions to and from the IR
+  bitbucket/        bitbucket converts Bitbucket Pipelines configurations to and from the IR
+  circleci/         circleci converts CircleCI 2.1 configurations to and from the IR
+  github/           github converts GitHub Actions workflows to and from the IR
+  gitlab/           gitlab converts GitLab CI/CD configurations to and from the IR
+schema/             schema validates CI configuration files against the providers'…
+  snapshots/        Provider JSON schemas built into the binary
+```
+<!-- /gendocs:layout -->
 
 ## License
 
