@@ -21,12 +21,12 @@ docs:
     - npm ci
     - npm run docs
 -- display.sh --
-cishift docs.gitlab-ci.yml --to github --strict
-# warning: docs.rules[0]: rules:changes/exists are not portable and were dropped
-# # Converted by ci-shift from docs.gitlab-ci.yml (GitLab CI/CD) to GitHub Actions.
-# # Review before use; 1 item(s) need attention:
-# #   - docs.rules[0]: rules:changes/exists are not portable and were dropped
-# ...
+$ cishift docs.gitlab-ci.yml --to github --strict
+warning: docs.rules[0]: rules:changes/exists are not portable and were dropped
+# Converted by ci-shift from docs.gitlab-ci.yml (GitLab CI/CD) to GitHub Actions.
+# Review before use; 1 item(s) need attention:
+#   - docs.rules[0]: rules:changes/exists are not portable and were dropped
+...
 
-echo $?
-# 1
+$ echo $?
+1

@@ -17,7 +17,14 @@
 //	# doc:id      example-id        (required) marker and SVG name
 //	# doc:file    README.md         (required) file that holds the markers
 //	# doc:tested  true              the script also runs under testscript
-//	# doc:lang    bash              language of the code-block fallback
+//	# doc:lang    console           how display.sh is highlighted (see below)
+//
+// With the default doc:lang console, display.sh is a terminal session: lines
+// starting with "$ " are commands and every other line is their output,
+// printed verbatim. Commands are drawn bright and output muted, so output
+// that happens to start with "#" (a YAML comment, say) is never mistaken for
+// a command. Any other doc:lang (bash, yaml, …) is passed to freeze as the
+// syntax to highlight.
 //
 // Rendered SVGs are committed. Each one records a hash of the snippet it
 // shows, so an edited display.sh is re-rendered, and a stale SVG is never
@@ -148,10 +155,10 @@ const stampPrefix = "<!-- docsmith:sha256:"
 //
 // The stamp covers everything that shows up in the image, so changing the
 // snippet, the title or the footer re-renders it.
-func renderOrUse(s settings, id, content, docDir, txtarPath string, tested bool) (darkRel, lightRel string) {
+func renderOrUse(s settings, id, lang, content, docDir, txtarPath string, tested bool) (darkRel, lightRel string) {
 	darkAbs := filepath.Join(s.svgDir, id+"-dark.svg")
 	lightAbs := filepath.Join(s.svgDir, id+"-light.svg")
-	stamp := stampFor(id, content, filepath.Base(txtarPath), tested, s.width)
+	stamp := stampFor(id, lang, content, filepath.Base(txtarPath), tested, s.width)
 
 	rel := func() (string, string) {
 		d, _ := filepath.Rel(docDir, darkAbs)
@@ -183,7 +190,7 @@ func renderOrUse(s settings, id, content, docDir, txtarPath string, tested bool)
 		{"github-dark", darkAbs, true},
 		{"github", lightAbs, false},
 	} {
-		if err := runFreeze(freezeBin, v.theme, id, content, v.dst, v.isDark, txtarPath, tested, s.width, stamp); err != nil {
+		if err := runFreeze(freezeBin, v.theme, id, lang, content, v.dst, v.isDark, txtarPath, tested, s.width, stamp); err != nil {
 			fmt.Fprintf(os.Stderr, "  warn: freeze %s: %v\n", v.dst, err)
 			return "", ""
 		}
@@ -193,9 +200,9 @@ func renderOrUse(s settings, id, content, docDir, txtarPath string, tested bool)
 	return rel()
 }
 
-func stampFor(id, content, txtarName string, tested bool, width float64) string {
+func stampFor(id, lang, content, txtarName string, tested bool, width float64) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "v1\x00%s\x00%s\x00%t\x00%.0f\x00%s", id, txtarName, tested, width, content)
+	fmt.Fprintf(h, "v2\x00%s\x00%s\x00%s\x00%t\x00%.0f\x00%s", id, lang, txtarName, tested, width, content)
 	return stampPrefix + hex.EncodeToString(h.Sum(nil))[:16] + " -->"
 }
 
@@ -206,15 +213,21 @@ func hasStamp(path, stamp string) bool {
 
 // runFreeze pipes content into freeze, writes the SVG to dst, then adds the
 // title bar, the CI footer and the stamp.
-func runFreeze(bin, theme, id, content, dst string, isDark bool, txtarPath string, tested bool, width float64, stamp string) error {
-	cmd := exec.Command(bin, // #nosec G204 -- bin comes from exec.LookPath on a fixed name
-		"--language", "bash",
+func runFreeze(bin, theme, id, lang, content, dst string, isDark bool, txtarPath string, tested bool, width float64, stamp string) error {
+	args := []string{
 		"--window",
 		"--border.radius", "8",
 		"--width", strconv.FormatFloat(width, 'f', 0, 64),
 		"--theme", theme,
 		"--output", dst,
-	)
+	}
+	if lang == "console" {
+		// freeze draws ANSI-colored input as is instead of highlighting it.
+		content = colorSession(content, isDark)
+	} else {
+		args = append(args, "--language", lang)
+	}
+	cmd := exec.Command(bin, args...) // #nosec G204 -- bin comes from exec.LookPath on a fixed name
 	cmd.Stdin = strings.NewReader(content)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w\n%s", err, out)
@@ -233,6 +246,27 @@ func runFreeze(bin, theme, id, content, dst string, isDark bool, txtarPath strin
 	// without parsing the (large, font-embedding) document.
 	svg = rootOpen.ReplaceAllString(svg, "$0\n"+stamp)
 	return os.WriteFile(dst, []byte(svg), 0o644)
+}
+
+// colorSession colors a terminal session with 24-bit ANSI codes: "$ "
+// command lines bright, everything else muted, in the GitHub palette.
+func colorSession(content string, isDark bool) string {
+	cmd, muted := "230;237;243", "139;148;158" // #e6edf3, #8b949e
+	if !isDark {
+		cmd, muted = "31;35;40", "87;96;106" // #1f2328, #57606a
+	}
+	const reset = "\x1b[0m"
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		switch {
+		case line == "":
+		case strings.HasPrefix(line, "$ "):
+			lines[i] = "\x1b[38;2;" + muted + "m$ \x1b[38;2;" + cmd + "m" + line[2:] + reset
+		default:
+			lines[i] = "\x1b[38;2;" + muted + "m" + line + reset
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func fileExists(path string) bool {
@@ -492,7 +526,7 @@ func run(s settings) error {
 		abs := filepath.Join(s.root, filepath.FromSlash(docFile))
 		byFile[abs] = append(byFile[abs], injection{
 			id:      id,
-			lang:    orDefault(meta["lang"], "bash"),
+			lang:    orDefault(meta["lang"], "console"),
 			display: display,
 			txtar:   f,
 			tested:  strings.EqualFold(meta["tested"], "true"),
@@ -513,7 +547,7 @@ func run(s settings) error {
 			relTxtar = filepath.ToSlash(relTxtar)
 
 			var block string
-			darkRel, lightRel := renderOrUse(s, inj.id, inj.display, docDir, inj.txtar, inj.tested)
+			darkRel, lightRel := renderOrUse(s, inj.id, inj.lang, inj.display, docDir, inj.txtar, inj.tested)
 			if darkRel != "" {
 				// The link and CI badge are baked into the image.
 				block = pictureBlock(s.binary, inj.id, darkRel, lightRel, relTxtar)
