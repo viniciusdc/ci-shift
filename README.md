@@ -199,6 +199,4 @@ and adding its schema URL to `schema/schema.go`.
 
 ## License
 
-ci-shift is licensed under the [Apache License 2.0](LICENSE). The provider
-schemas embedded in `schema/snapshots/` keep their upstream licenses; see
-[NOTICE](NOTICE).
+[Apache License 2.0](LICENSE). Third-party notices are in [NOTICE](NOTICE).
