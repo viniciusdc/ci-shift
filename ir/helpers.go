@@ -104,6 +104,10 @@ func PromoteExternalVars(p *Pipeline, d *Diagnostics, builtinPrefixes ...string)
 			for i := range st.Env {
 				st.Env[i].Value = rewrite(st.Env[i].Value)
 			}
+			// Action/pipe inputs usually carry repository secrets too.
+			for i := range st.With {
+				st.With[i].Value = rewrite(st.With[i].Value)
+			}
 		}
 		for i := range j.Env {
 			j.Env[i].Value = rewrite(j.Env[i].Value)

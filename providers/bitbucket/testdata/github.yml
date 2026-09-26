@@ -1,0 +1,84 @@
+name: CI
+on:
+  push:
+    branches: [main, develop]
+    paths: ['src/**']
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+env:
+  APP_ENV: ci
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+      - run: npm ci && npm run build
+        env:
+          SHA: ${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    container: python:3.12
+    strategy:
+      matrix:
+        py: ['3.11', '3.12']
+        db: [pg]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pw
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+      - run: echo "py ${{ matrix.py }} on $DB_URL"
+        working-directory: app
+        env:
+          DB_URL: postgres://localhost/${{ matrix.db }}
+      - run: pytest
+        continue-on-error: true
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - run: echo cleanup
+        if: always()
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run lint
+  deploy:
+    needs: [test, lint]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, linux, deployer]
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./deploy.sh ${{ github.ref_name }}
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: echo hi
