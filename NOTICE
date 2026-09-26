@@ -1,5 +1,5 @@
 ci-shift
-Copyright 2026 Vinicius Cerutti
+Copyright 2025-2026 Vinicius Cerutti
 
 This product embeds CI/CD configuration schemas published by third
 parties. Their sources and licenses are listed in schema/snapshots/README.md.
