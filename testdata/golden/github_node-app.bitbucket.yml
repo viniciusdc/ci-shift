@@ -1,0 +1,448 @@
+# Converted by ci-shift from github/node-app (GitHub Actions) to Bitbucket Pipelines.
+# Review before use; 3 item(s) need attention:
+#   - pipelines.custom.scheduled: create a schedule for the custom pipeline "scheduled" in Repository settings > Pipelines > Schedules with cron 0 3 * * 1 (UTC)
+#   - test.steps[3]: Bitbucket uploads artifacts only when the step succeeds; when: always was dropped
+#   - deploy.steps[2]: github step "slackapi/slack-github-action@v1" has no Bitbucket equivalent; a failing placeholder command was emitted
+
+image: atlassian/default-image:4
+definitions:
+  caches:
+    npm:
+      key:
+        files:
+          - package-lock.json
+      path: ~/.npm
+  services:
+    postgres:
+      image: postgres:16
+      variables:
+        POSTGRES_PASSWORD: postgres
+pipelines:
+  branches:
+    main:
+      - step:
+          name: lint
+          image: node:20
+          caches:
+            - npm
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run lint
+      - parallel:
+          - step:
+              name: test (18, linux)
+              image: node:18
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=18
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+          - step:
+              name: test (20, linux)
+              image: node:20
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=20
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+      - step:
+          name: build
+          image: node:20
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run build
+            - echo "Built ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+          artifacts:
+            download: false
+            paths:
+              - dist
+      - step:
+          name: deploy
+          clone:
+            enabled: false
+          deployment: production
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - ./scripts/deploy.sh dist "${DEPLOY_TOKEN}"
+            - 'echo "ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+    release/**:
+      - step:
+          name: lint
+          image: node:20
+          caches:
+            - npm
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run lint
+      - parallel:
+          - step:
+              name: test (18, linux)
+              image: node:18
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=18
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+          - step:
+              name: test (20, linux)
+              image: node:20
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=20
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+      - step:
+          name: build
+          image: node:20
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run build
+            - echo "Built ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+          artifacts:
+            download: false
+            paths:
+              - dist
+  tags:
+    v*:
+      - step:
+          name: lint
+          image: node:20
+          caches:
+            - npm
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run lint
+      - parallel:
+          - step:
+              name: test (18, linux)
+              image: node:18
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=18
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+          - step:
+              name: test (20, linux)
+              image: node:20
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=20
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+      - step:
+          name: build
+          image: node:20
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run build
+            - echo "Built ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+          artifacts:
+            download: false
+            paths:
+              - dist
+  pull-requests:
+    '**':
+      - step:
+          name: lint
+          image: node:20
+          caches:
+            - npm
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run lint
+      - parallel:
+          - step:
+              name: test (18, linux)
+              image: node:18
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=18
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+          - step:
+              name: test (20, linux)
+              image: node:20
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=20
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+      - step:
+          name: build
+          image: node:20
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run build
+            - echo "Built ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+          artifacts:
+            download: false
+            paths:
+              - dist
+  custom:
+    manual:
+      - step:
+          name: lint
+          image: node:20
+          caches:
+            - npm
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run lint
+      - parallel:
+          - step:
+              name: test (18, linux)
+              image: node:18
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=18
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+          - step:
+              name: test (20, linux)
+              image: node:20
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=20
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+      - step:
+          name: build
+          image: node:20
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run build
+            - echo "Built ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+          artifacts:
+            download: false
+            paths:
+              - dist
+    scheduled:
+      - step:
+          name: lint
+          image: node:20
+          caches:
+            - npm
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run lint
+      - parallel:
+          - step:
+              name: test (18, linux)
+              image: node:18
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=18
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+          - step:
+              name: test (20, linux)
+              image: node:20
+              max-time: 20
+              clone:
+                depth: full
+              services:
+                - postgres
+              script:
+                - export NODE_ENV=test
+                - export REGISTRY=ghcr.io
+                - export node=20
+                - export os=linux
+                - npm ci
+                - |-
+                  # Run tests
+                  (
+                    export DATABASE_URL=postgres://postgres:postgres@localhost:5432/app
+                    npm test -- --coverage
+                  )
+              artifacts:
+                - coverage/
+      - step:
+          name: build
+          image: node:20
+          script:
+            - export NODE_ENV=test
+            - export REGISTRY=ghcr.io
+            - npm ci
+            - npm run build
+            - echo "Built ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+          artifacts:
+            download: false
+            paths:
+              - dist

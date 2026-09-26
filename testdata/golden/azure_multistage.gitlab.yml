@@ -1,0 +1,141 @@
+# Converted by ci-shift from azure/multistage (Azure Pipelines) to GitLab CI/CD.
+# Review before use; 11 item(s) need attention:
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.test.steps[3]: task PublishTestResults@2 has no portable equivalent; it only converts back to Azure Pipelines
+#   - stages.Package.jobs.package.steps[3]: disabled step was dropped
+#   - stages.Deploy.jobs.release.strategy.runOnce.preDeploy: deployment lifecycle hook "preDeploy" is not portable and was dropped
+#   - stages.Deploy.jobs.release.steps[1]: step template "steps/notify.yml" is not resolved; convert it separately
+#   - stages.Deploy.jobs.notify.steps[1].condition: condition "and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))" could not be translated and was kept verbatim
+#   - workflow: paths-ignore filters are not supported by GitLab rules and were dropped
+#   - workflow: create a pipeline schedule in GitLab (Build > Pipeline schedules) for cron 0 3 * * 1
+#   - test.steps[3]: azure step "PublishTestResults@2" has no GitLab equivalent; a failing placeholder command was emitted
+#   - notify.steps[2]: step condition could not be translated; the step always runs
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^experimental\/.*$/
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*$/
+    - if: $CI_COMMIT_TAG =~ /^v.*$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
+      changes:
+        - src/*
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+stages:
+  - Build
+  - Package
+  - Deploy
+variables:
+  buildConfiguration: Release
+  NODE_ENV: production
+  python_version: '3.12'
+Build_lint:
+  stage: Build
+  image: node:20
+  needs: []
+  variables:
+    STAGE_VAR: build
+    GIT_DEPTH: '1'
+    GIT_SUBMODULE_STRATEGY: recursive
+  cache:
+    key:
+      files:
+        - package-lock.json
+      prefix: npm
+    paths:
+      - $(Pipeline.Workspace)/.npm
+  script:
+    - |-
+      # Lint sources
+      (
+        export NPM_TOKEN="${NPM_TOKEN}"
+        npm ci
+        npm run lint -- --config ${buildConfiguration}
+      )
+test:
+  stage: Build
+  image: python:${python_version}
+  services:
+    - name: postgres:16
+      variables:
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+  needs:
+    - Build_lint
+  variables:
+    STAGE_VAR: build
+  script:
+    - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+  after_script:
+    - |-
+      (
+        cd "${CI_PROJECT_DIR}/tests"
+        echo "sha ${CI_COMMIT_SHA} on ${CI_COMMIT_REF_NAME}"
+        echo "python ${python_version}"
+        pytest --junitxml=out/results.xml
+      )
+  artifacts:
+    name: test-results
+    paths:
+      - out
+    when: always
+  parallel:
+    matrix:
+      - imageName: ubuntu-latest
+        python_version: '3.11'
+      - imageName: macOS-latest
+        python_version: '3.12'
+  timeout: 30m
+  allow_failure: true
+package:
+  stage: Package
+  needs:
+    - Build_lint
+    - test
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - echo 'nothing to do'
+  artifacts:
+    name: bundle
+    paths:
+      - dist
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  tags:
+    - SelfHosted
+Package_lint:
+  stage: Package
+  needs:
+    - Build_lint
+    - test
+  script:
+    - echo package lint
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+release:
+  stage: Deploy
+  needs:
+    - package
+    - Package_lint
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - |-
+      (
+        export TOKEN="${DEPLOY_TOKEN}"
+        ./deploy.sh ${CI_PIPELINE_IID}
+      )
+  rules:
+    - if: $CI_COMMIT_TAG
+  environment: production
+notify:
+  stage: Deploy
+  needs:
+    - release
+  script:
+    - echo "$(pwd)" notified
+    - echo weird
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^hotfix\/.*$/

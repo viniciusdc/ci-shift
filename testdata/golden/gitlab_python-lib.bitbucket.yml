@@ -1,0 +1,202 @@
+# Converted by ci-shift from gitlab/python-lib (GitLab CI/CD) to Bitbucket Pipelines.
+# Review before use; 1 item(s) need attention:
+#   - pytest.steps[4]: Bitbucket uploads artifacts only when the step succeeds; when: always was dropped
+
+definitions:
+  caches:
+    pip-2:
+      key:
+        files:
+          - requirements.txt
+      path: .cache/pip
+  services:
+    redis:
+      image: redis:7
+pipelines:
+  branches:
+    main:
+      - step:
+          name: ruff
+          image: python:3.12
+          caches:
+            - pip-2
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install ruff
+            - ruff check .
+      - parallel:
+          - step:
+              name: pytest (3.11)
+              image: python:3.11
+              caches:
+                - pip-2
+              services:
+                - redis
+              script:
+                - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+                - export PYTHON_VERSION=3.12
+                - export PY=3.11
+                - export REDIS_URL=redis://redis:6379/0
+                - python -m pip install --upgrade pip
+                - pip install -r requirements.txt
+                - pytest --junitxml=report.xml
+              artifacts:
+                - report.xml
+          - step:
+              name: pytest (3.12)
+              image: python:3.12
+              caches:
+                - pip-2
+              services:
+                - redis
+              script:
+                - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+                - export PYTHON_VERSION=3.12
+                - export PY=3.12
+                - export REDIS_URL=redis://redis:6379/0
+                - python -m pip install --upgrade pip
+                - pip install -r requirements.txt
+                - pytest --junitxml=report.xml
+              artifacts:
+                - report.xml
+      - step:
+          name: build-wheel
+          image: python:3.12
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install build
+            - python -m build
+          artifacts:
+            - dist/
+  tags:
+    '*':
+      - step:
+          name: ruff
+          image: python:3.12
+          caches:
+            - pip-2
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install ruff
+            - ruff check .
+      - parallel:
+          - step:
+              name: pytest (3.11)
+              image: python:3.11
+              caches:
+                - pip-2
+              services:
+                - redis
+              script:
+                - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+                - export PYTHON_VERSION=3.12
+                - export PY=3.11
+                - export REDIS_URL=redis://redis:6379/0
+                - python -m pip install --upgrade pip
+                - pip install -r requirements.txt
+                - pytest --junitxml=report.xml
+              artifacts:
+                - report.xml
+          - step:
+              name: pytest (3.12)
+              image: python:3.12
+              caches:
+                - pip-2
+              services:
+                - redis
+              script:
+                - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+                - export PYTHON_VERSION=3.12
+                - export PY=3.12
+                - export REDIS_URL=redis://redis:6379/0
+                - python -m pip install --upgrade pip
+                - pip install -r requirements.txt
+                - pytest --junitxml=report.xml
+              artifacts:
+                - report.xml
+      - step:
+          name: build-wheel
+          image: python:3.12
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install build
+            - python -m build
+          artifacts:
+            - dist/
+      - step:
+          name: publish
+          image: python:3.12
+          deployment: pypi
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install twine
+            - twine upload -u __token__ -p "${PYPI_TOKEN}" dist/*
+  pull-requests:
+    '**':
+      - step:
+          name: ruff
+          image: python:3.12
+          caches:
+            - pip-2
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install ruff
+            - ruff check .
+      - parallel:
+          - step:
+              name: pytest (3.11)
+              image: python:3.11
+              caches:
+                - pip-2
+              services:
+                - redis
+              script:
+                - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+                - export PYTHON_VERSION=3.12
+                - export PY=3.11
+                - export REDIS_URL=redis://redis:6379/0
+                - python -m pip install --upgrade pip
+                - pip install -r requirements.txt
+                - pytest --junitxml=report.xml
+              artifacts:
+                - report.xml
+          - step:
+              name: pytest (3.12)
+              image: python:3.12
+              caches:
+                - pip-2
+              services:
+                - redis
+              script:
+                - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+                - export PYTHON_VERSION=3.12
+                - export PY=3.12
+                - export REDIS_URL=redis://redis:6379/0
+                - python -m pip install --upgrade pip
+                - pip install -r requirements.txt
+                - pytest --junitxml=report.xml
+              artifacts:
+                - report.xml
+      - step:
+          name: build-wheel
+          image: python:3.12
+          script:
+            - export PIP_CACHE_DIR="${BITBUCKET_CLONE_DIR}/.cache/pip"
+            - export PYTHON_VERSION=3.12
+            - python -m pip install --upgrade pip
+            - pip install build
+            - python -m build
+          artifacts:
+            - dist/

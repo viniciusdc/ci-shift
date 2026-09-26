@@ -1,0 +1,142 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@5.1.0
+
+parameters:
+  deploy-env:
+    type: string
+    default: staging
+
+executors:
+  node-exec:
+    parameters:
+      tag:
+        type: string
+        default: "18.20"
+    docker:
+      - image: cimg/node:<< parameters.tag >>
+      - image: postgres:16
+        name: db
+        environment:
+          POSTGRES_PASSWORD: example
+    environment:
+      NODE_ENV: test
+    working_directory: ~/project
+
+commands:
+  install:
+    parameters:
+      lockfile:
+        type: string
+        default: package-lock.json
+    steps:
+      - restore_cache:
+          keys:
+            - v1-deps-{{ checksum "<< parameters.lockfile >>" }}
+            - v1-deps-
+      - run: npm ci
+      - save_cache:
+          key: v1-deps-{{ checksum "<< parameters.lockfile >>" }}
+          paths:
+            - ~/.npm
+
+jobs:
+  build:
+    executor:
+      name: node-exec
+      tag: "20.11"
+    steps:
+      - checkout
+      - install
+      - run:
+          name: Build
+          command: npm run build -- --sha $CIRCLE_SHA1
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
+      - store_artifacts:
+          path: dist
+          destination: bundle
+
+  test:
+    parameters:
+      node:
+        type: string
+        default: "18"
+      coverage:
+        type: boolean
+        default: true
+    docker:
+      - image: cimg/node:<< parameters.node >>
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          command: npm test
+          environment:
+            NODE_VERSION: << parameters.node >>
+      - store_test_results:
+          path: test-results
+      - when:
+          condition: << parameters.coverage >>
+          steps:
+            - run:
+                name: Upload coverage
+                command: ./upload.sh --token $CODECOV_TOKEN
+                when: always
+
+  deploy:
+    machine:
+      image: ubuntu-2204:current
+    parallelism: 2
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - node/install-packages:
+          pkg-manager: npm
+      - run: ./deploy.sh << pipeline.parameters.deploy-env >> $CIRCLE_BRANCH
+
+  nightly-audit:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run: ./audit.sh
+
+workflows:
+  build-test-deploy:
+    jobs:
+      - build:
+          filters: &branches
+            branches:
+              only:
+                - main
+                - /release\/.*/
+      - test:
+          requires: [build]
+          matrix:
+            parameters:
+              node: ["18", "20"]
+          filters: *branches
+      - hold:
+          type: approval
+          requires: [test]
+          filters: *branches
+      - deploy:
+          requires: [hold]
+          context: prod
+          filters: *branches
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 3 * * *"
+          filters:
+            branches:
+              only: main
+    jobs:
+      - build
+      - nightly-audit

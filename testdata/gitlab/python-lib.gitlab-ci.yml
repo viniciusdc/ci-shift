@@ -1,0 +1,79 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+stages:
+  - lint
+  - test
+  - build
+  - publish
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHON_VERSION: "3.12"
+
+default:
+  image: python:3.12
+  before_script:
+    - python -m pip install --upgrade pip
+
+.pip-cache: &pip-cache
+  cache:
+    key:
+      files:
+        - requirements.txt
+      prefix: pip
+    paths:
+      - .cache/pip
+
+ruff:
+  stage: lint
+  <<: *pip-cache
+  script:
+    - pip install ruff
+    - ruff check .
+
+.test-template:
+  stage: test
+  <<: *pip-cache
+  services:
+    - name: redis:7
+      alias: redis
+  variables:
+    REDIS_URL: redis://redis:6379/0
+  script:
+    - pip install -r requirements.txt
+    - pytest --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+    expire_in: 1 week
+
+pytest:
+  extends: .test-template
+  image: python:${PY}
+  parallel:
+    matrix:
+      - PY: ["3.11", "3.12"]
+
+build-wheel:
+  stage: build
+  script:
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/
+
+publish:
+  stage: publish
+  needs: [build-wheel]
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - pip install twine
+    - twine upload -u __token__ -p "$PYPI_TOKEN" dist/*
+  environment: pypi

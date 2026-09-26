@@ -1,0 +1,95 @@
+# Converted by ci-shift from circleci/app (CircleCI) to GitHub Actions.
+# Review before use; 5 item(s) need attention:
+#   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
+#   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
+#   - on.schedule: GitHub schedules always run on the default branch; branch filters [main] were dropped
+#   - jobs.deploy: manual approval gates map to GitHub environments with required reviewers; configure one for environment "approval"
+#   - jobs.deploy.steps[2]: circleci step "node/install-packages" has no GitHub equivalent; a failing placeholder step was emitted
+
+name: build-test-deploy
+on:
+  push:
+    branches:
+      - main
+      - release/*
+  schedule:
+    - cron: 0 3 * * *
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: cimg/node:20.11
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: example
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-v1-deps-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-v1-deps-
+      - run: npm ci
+      - name: Build
+        run: npm run build -- --sha ${GITHUB_SHA}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: dist
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    container: cimg/node:${{ matrix.node }}
+    strategy:
+      matrix:
+        node: ['18', '20']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle
+          path: dist
+      - run: npm test
+        env:
+          NODE_VERSION: ${{ matrix.node }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.node }}
+          path: test-results
+      - name: Upload coverage
+        if: always()
+        run: ./upload.sh --token ${CODECOV_TOKEN}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: approval
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download test-results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+          path: test-results
+      - name: Download bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle
+          path: dist
+      - run: |-
+          echo "::error::ci-shift: port circleci step 'node/install-packages' manually"
+          exit 1
+      - run: ./deploy.sh staging ${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}
+  nightly-audit:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    container: cimg/base:stable
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./audit.sh

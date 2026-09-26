@@ -1,0 +1,52 @@
+stages: [build, test, deploy]
+variables:
+  DOCKER_DRIVER: overlay2
+  APP_NAME: myapp
+default:
+  image: node:20
+cache:
+  key:
+    files: [package-lock.json]
+    prefix: npm
+  paths: [.npm/]
+build:
+  stage: build
+  script:
+    - npm ci --cache .npm
+    - npm run build
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 week
+lint:
+  stage: build
+  script: npm run lint
+  allow_failure: true
+test:
+  stage: test
+  services:
+    - name: postgres:16
+      alias: db
+      variables:
+        POSTGRES_PASSWORD: secret
+  variables:
+    GIT_DEPTH: "10"
+  parallel:
+    matrix:
+      - SUITE: [unit, e2e]
+  script:
+    - npm test -- --suite $SUITE --sha $CI_COMMIT_SHA
+    - echo $REGISTRY_PASSWORD | docker login -u ci --password-stdin
+  after_script:
+    - echo cleanup
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+deploy:
+  stage: deploy
+  image: alpine:3.19
+  tags: [windows]
+  environment: production
+  script:
+    - ./deploy.sh
+  when: manual
+  only: [tags]

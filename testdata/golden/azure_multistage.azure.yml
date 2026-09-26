@@ -1,0 +1,181 @@
+# Converted by ci-shift from azure/multistage (Azure Pipelines) to Azure Pipelines.
+# Review before use; 8 item(s) need attention:
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.test.steps[3]: task PublishTestResults@2 has no portable equivalent; it only converts back to Azure Pipelines
+#   - stages.Package.jobs.package.steps[3]: disabled step was dropped
+#   - stages.Deploy.jobs.release.strategy.runOnce.preDeploy: deployment lifecycle hook "preDeploy" is not portable and was dropped
+#   - stages.Deploy.jobs.release.steps[1]: step template "steps/notify.yml" is not resolved; convert it separately
+#   - stages.Deploy.jobs.notify.steps[1].condition: condition "and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))" could not be translated and was kept verbatim
+#   - stages.Build.jobs.test: every matrix leg publishes the same artifact name; Azure requires unique names per run
+
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+    exclude:
+      - experimental/*
+  tags:
+    include:
+      - v*
+  paths:
+    exclude:
+      - docs/*
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+schedules:
+  - cron: 0 3 * * 1
+    branches:
+      include:
+        - main
+    always: 'true'
+variables:
+  buildConfiguration: Release
+  NODE_ENV: production
+  python_version: '3.12'
+resources:
+  containers:
+    - container: postgres
+      image: postgres:16
+      env:
+        POSTGRES_PASSWORD: $(DB_PASSWORD)
+      ports:
+        - 5432:5432
+stages:
+  - stage: Build
+    dependsOn: []
+    jobs:
+      - job: Build_lint
+        displayName: Lint
+        pool:
+          vmImage: ubuntu-22.04
+        container: node:20
+        variables:
+          STAGE_VAR: build
+        steps:
+          - checkout: self
+            fetchDepth: '1'
+            submodules: recursive
+            lfs: 'true'
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - task: Cache@2
+            inputs:
+              key: npm | "$(Agent.OS)" | package-lock.json
+              restoreKeys: npm | "$(Agent.OS)"
+              path: $(Pipeline.Workspace)/.npm
+          - script: |-
+              npm ci
+              npm run lint -- --config $(buildConfiguration)
+            displayName: Lint sources
+            env:
+              NPM_TOKEN: $(NPM_TOKEN)
+      - job: test
+        dependsOn: Build_lint
+        continueOnError: 'true'
+        timeoutInMinutes: '30'
+        pool:
+          vmImage: $(imageName)
+        services:
+          postgres: postgres
+        variables:
+          STAGE_VAR: build
+        strategy:
+          matrix:
+            ubuntu_latest_3_11:
+              imageName: ubuntu-latest
+              python_version: '3.11'
+            macos_latest_3_12:
+              imageName: macOS-latest
+              python_version: '3.12'
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(python_version)
+          - bash: |-
+              echo "sha $(Build.SourceVersion) on $(Build.SourceBranchName)"
+              echo "python $(python_version)"
+              pytest --junitxml=out/results.xml
+            workingDirectory: $(Build.SourcesDirectory)/tests
+            condition: always()
+          - publish: out
+            artifact: test-results
+            condition: always()
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFiles: '**/junit-*.xml'
+              testRunTitle: Python $(Build.BuildId)
+  - stage: Package
+    dependsOn:
+      - Build
+    jobs:
+      - job: package
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+        pool:
+          name: SelfHosted
+        steps:
+          - checkout: none
+          - task: DownloadPipelineArtifact@2
+            displayName: Download test-results
+            inputs:
+              buildType: current
+              artifactName: test-results
+              targetPath: $(Build.SourcesDirectory)/out
+          - publish: dist
+            artifact: bundle
+      - job: Package_lint
+        displayName: lint
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - checkout: self
+          - script: echo package lint
+  - stage: Deploy
+    dependsOn:
+      - Package
+    jobs:
+      - deployment: release
+        displayName: Release
+        condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+        pool:
+          vmImage: ubuntu-22.04
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download bundle
+                  inputs:
+                    buildType: current
+                    artifactName: bundle
+                    targetPath: $(Build.SourcesDirectory)/dist
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download test-results
+                  inputs:
+                    buildType: current
+                    artifactName: test-results
+                    targetPath: $(Build.SourcesDirectory)/out
+                - script: ./deploy.sh $(Build.BuildNumber)
+                  env:
+                    TOKEN: $(DEPLOY_TOKEN)
+      - job: notify
+        dependsOn: release
+        condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/heads/hotfix/')))
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - checkout: self
+          - script: echo "$(pwd)" notified
+          - script: echo weird
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))

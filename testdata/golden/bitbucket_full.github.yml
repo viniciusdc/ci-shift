@@ -1,0 +1,208 @@
+# Converted by ci-shift from bitbucket/full (Bitbucket Pipelines) to GitHub Actions.
+# Review before use; 5 item(s) need attention:
+#   - pipelines.custom: custom pipelines run manually or from schedules configured in Repository settings > Pipelines > Schedules; schedules are not stored in the file and were not converted
+#   - pipelines.branches.main[1].stage.steps[0].step.script[1]: Bitbucket pipe "atlassian/slack-notify:2.1.0" only exists on Bitbucket Pipelines
+#   - pipelines.custom.deploy-staging[0].variables: custom pipeline variables are prompted at run time and were dropped
+#   - jobs.main-publish.steps[3]: bitbucket step "atlassian/slack-notify:2.1.0" has no GitHub equivalent; a failing placeholder step was emitted
+#   - jobs.deploy-staging-deploy: manual approval gates map to GitHub environments with required reviewers; configure one for environment "staging"
+
+name: CI
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - v*
+  pull_request:
+  workflow_dispatch:
+jobs:
+  default-build:
+    name: Build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: node:20
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-cache-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-cache-
+      - run: |-
+          npm ci
+          npm run build -- --sha ${GITHUB_SHA}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-build
+          path: dist/**
+  default-unit-tests:
+    name: Unit tests
+    needs: default-build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: node:20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: example
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - name: Download default-build
+        uses: actions/download-artifact@v4
+        with:
+          name: default-build
+          path: dist
+      - run: npm test -- --token ${NPM_TOKEN}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - if: always()
+        run: echo "exit code $BITBUCKET_EXIT_CODE"
+        continue-on-error: true
+  default-lint:
+    name: Lint
+    needs: default-build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: node:20
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - name: Download default-build
+        uses: actions/download-artifact@v4
+        with:
+          name: default-build
+          path: dist
+      - run: npm run lint
+  main-build:
+    name: Build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    container: node:20
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-cache-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-cache-
+      - run: |-
+          npm ci
+          npm run build -- --sha ${GITHUB_SHA}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-build
+          path: dist/**
+  main-publish:
+    name: Publish
+    needs: main-build
+    if: github.ref == 'refs/heads/main'
+    runs-on:
+      - self-hosted
+      - linux
+      - big
+    environment: production
+    container: node:20
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - name: Download main-build
+        uses: actions/download-artifact@v4
+        with:
+          name: main-build
+          path: dist
+      - run: npm publish
+      - run: |-
+          echo "::error::ci-shift: port bitbucket step 'atlassian/slack-notify:2.1.0' manually"
+          exit 1
+  tag-v-tag-build:
+    name: Tag build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    container: node:22
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - run: echo "${GITHUB_REF_NAME}"
+  pr-pr-check:
+    name: PR check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: node:20
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+      - run: npm test
+  deploy-staging-build:
+    name: Build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container: node:20
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-cache-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-cache-
+      - run: |-
+          npm ci
+          npm run build -- --sha ${GITHUB_SHA}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deploy-staging-build
+          path: dist/**
+  deploy-staging-deploy:
+    name: Deploy
+    needs: deploy-staging-build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: staging
+    container: node:20
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          lfs: true
+      - run: ./deploy.sh

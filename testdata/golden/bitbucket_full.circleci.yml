@@ -1,0 +1,251 @@
+# Converted by ci-shift from bitbucket/full (Bitbucket Pipelines) to CircleCI.
+# Review before use; 21 item(s) need attention:
+#   - pipelines.custom: custom pipelines run manually or from schedules configured in Repository settings > Pipelines > Schedules; schedules are not stored in the file and were not converted
+#   - pipelines.branches.main[1].stage.steps[0].step.script[1]: Bitbucket pipe "atlassian/slack-notify:2.1.0" only exists on Bitbucket Pipelines
+#   - pipelines.custom.deploy-staging[0].variables: custom pipeline variables are prompted at run time and were dropped
+#   - jobs.default-build.steps[4]: store_artifacts takes a file or directory; pattern "dist/**" was widened to "dist"
+#   - jobs.default-build: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.default-unit-tests: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.default-lint: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.main-build.steps[4]: store_artifacts takes a file or directory; pattern "dist/**" was widened to "dist"
+#   - jobs.main-build: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.main-publish: self-hosted runner labels [linux big] became resource class "linux"; register a CircleCI self-hosted runner class (<namespace>/<name>)
+#   - jobs.main-publish: container image node:20 cannot be combined with this executor and was dropped
+#   - jobs.main-publish.steps[3]: bitbucket step "atlassian/slack-notify:2.1.0" has no CircleCI equivalent; a failing placeholder command was emitted
+#   - jobs.main-publish: CircleCI has no job timeout; the 60 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.tag-v-tag-build: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.pr-pr-check: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.deploy-staging-build.steps[4]: store_artifacts takes a file or directory; pattern "dist/**" was widened to "dist"
+#   - jobs.deploy-staging-build: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.deploy-staging-deploy: CircleCI has no job timeout; the 30 minute limit was dropped (steps fail after 10 minutes without output)
+#   - workflows: CircleCI builds pull requests as branch builds; the push branch filters also skip pull requests from other branches
+#   - workflows.deploy-staging-build: CircleCI filters cannot select manually triggered pipelines; the job runs on every build
+#   - workflows.deploy-staging-deploy: CircleCI filters cannot select manually triggered pipelines; the job runs on every build
+
+version: 2.1
+jobs:
+  # Build
+  default-build:
+    docker:
+      - image: node:20
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - restore_cache:
+          keys:
+            - node-
+      - restore_cache:
+          keys:
+            - npm-cache-{{ checksum "package-lock.json" }}
+            - npm-cache-
+      - run: |-
+          npm ci
+          npm run build -- --sha ${CIRCLE_SHA1}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist/**
+      - store_artifacts:
+          path: dist
+      - save_cache:
+          key: node-{{ epoch }}
+          paths:
+            - node_modules
+      - save_cache:
+          key: npm-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+  # Unit tests
+  default-unit-tests:
+    docker:
+      - image: node:20
+      - image: postgres:16
+        name: postgres
+        environment:
+          POSTGRES_PASSWORD: example
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - attach_workspace:
+          at: .
+      - run: npm test -- --token ${NPM_TOKEN}
+      - run:
+          command: echo "exit code $BITBUCKET_EXIT_CODE" || true
+          when: always
+  # Lint
+  default-lint:
+    docker:
+      - image: node:20
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - attach_workspace:
+          at: .
+      - run: npm run lint
+  # Build
+  main-build:
+    docker:
+      - image: node:20
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - restore_cache:
+          keys:
+            - node-
+      - restore_cache:
+          keys:
+            - npm-cache-{{ checksum "package-lock.json" }}
+            - npm-cache-
+      - run: |-
+          npm ci
+          npm run build -- --sha ${CIRCLE_SHA1}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist/**
+      - store_artifacts:
+          path: dist
+      - save_cache:
+          key: node-{{ epoch }}
+          paths:
+            - node_modules
+      - save_cache:
+          key: npm-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+  # Publish
+  main-publish:
+    machine: true
+    resource_class: linux
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - attach_workspace:
+          at: .
+      - run: npm publish
+      - run: 'echo "ci-shift: port bitbucket step ''atlassian/slack-notify:2.1.0'' manually" && exit 1'
+  # Tag build
+  tag-v-tag-build:
+    docker:
+      - image: node:22
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - run: echo "${CIRCLE_TAG}"
+  # PR check
+  pr-pr-check:
+    docker:
+      - image: node:20
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - run: npm test
+  # Build
+  deploy-staging-build:
+    docker:
+      - image: node:20
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - restore_cache:
+          keys:
+            - node-
+      - restore_cache:
+          keys:
+            - npm-cache-{{ checksum "package-lock.json" }}
+            - npm-cache-
+      - run: |-
+          npm ci
+          npm run build -- --sha ${CIRCLE_SHA1}
+      - store_artifacts:
+          path: dist
+      - save_cache:
+          key: node-{{ epoch }}
+          paths:
+            - node_modules
+      - save_cache:
+          key: npm-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+  # Deploy
+  deploy-staging-deploy:
+    docker:
+      - image: node:20
+    steps:
+      - checkout
+      - run:
+          name: Fetch LFS objects
+          command: git lfs pull
+      - run: ./deploy.sh
+workflows:
+  main:
+    jobs:
+      - default-build:
+          filters:
+            tags:
+              only: /^v.*$/
+      - default-unit-tests:
+          requires:
+            - default-build
+          filters:
+            tags:
+              only: /^v.*$/
+      - default-lint:
+          requires:
+            - default-build
+          filters:
+            tags:
+              only: /^v.*$/
+      - main-build:
+          filters:
+            branches:
+              only: main
+      - main-publish:
+          requires:
+            - main-build
+          filters:
+            branches:
+              only: main
+      - tag-v-tag-build:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v.*$/
+      - pr-pr-check:
+          filters:
+            tags:
+              only: /^v.*$/
+      - deploy-staging-build:
+          filters:
+            tags:
+              only: /^v.*$/
+      - hold-deploy-staging-deploy:
+          type: approval
+          requires:
+            - deploy-staging-build
+          filters:
+            tags:
+              only: /^v.*$/
+      - deploy-staging-deploy:
+          requires:
+            - hold-deploy-staging-deploy
+          filters:
+            tags:
+              only: /^v.*$/

@@ -1,0 +1,162 @@
+# Converted by ci-shift from github/node-app (GitHub Actions) to CircleCI.
+# Review before use; 6 item(s) need attention:
+#   - jobs.test.steps[3]: every matrix instance persists the same workspace paths, which CircleCI rejects as a conflict; persist per-instance directories
+#   - jobs.test: CircleCI has no job timeout; the 20 minute limit was dropped (steps fail after 10 minutes without output)
+#   - jobs.deploy.steps[2]: github step "slackapi/slack-github-action@v1" has no CircleCI equivalent; a failing placeholder command was emitted
+#   - workflows: pull request target branch and path filters are not supported by CircleCI and were dropped
+#   - workflows: CircleCI builds pull requests as branch builds; the push branch filters also skip pull requests from other branches
+#   - workflows.scheduled: schedules were emitted as a legacy scheduled workflow; CircleCI recommends scheduled pipelines configured in the project settings
+
+version: 2.1
+jobs:
+  lint:
+    docker:
+      - image: node:20
+    environment:
+      NODE_ENV: test
+      REGISTRY: ghcr.io
+    steps:
+      - checkout
+      - restore_cache:
+          name: Cache node modules
+          keys:
+            - npm-{{ checksum "package-lock.json" }}
+            - npm-
+      - run: npm ci
+      - run: npm run lint
+      - save_cache:
+          key: npm-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+  test:
+    parameters:
+      node:
+        type: string
+      os:
+        type: string
+    docker:
+      - image: node:<< parameters.node >>
+      - image: postgres:16
+        name: postgres
+        environment:
+          POSTGRES_PASSWORD: postgres
+    environment:
+      NODE_ENV: test
+      REGISTRY: ghcr.io
+    steps:
+      - checkout
+      - run: npm ci
+      - run:
+          name: Run tests
+          command: npm test -- --coverage
+          environment:
+            DATABASE_URL: postgres://postgres:postgres@localhost:5432/app
+      - persist_to_workspace:
+          root: .
+          paths:
+            - coverage/
+          when: always
+      - store_artifacts:
+          path: coverage/
+          destination: coverage-${{ matrix.node }}
+          when: always
+  build:
+    docker:
+      - image: node:20
+    environment:
+      NODE_ENV: test
+      REGISTRY: ghcr.io
+    steps:
+      - checkout
+      - run: |-
+          npm ci
+          npm run build
+          echo "Built ${CIRCLE_SHA1} on ${CIRCLE_BRANCH:-${CIRCLE_TAG}}"
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
+      - store_artifacts:
+          path: dist
+          destination: dist
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      NODE_ENV: test
+      REGISTRY: ghcr.io
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Deploy
+          command: ./scripts/deploy.sh dist "${DEPLOY_TOKEN}"
+      - run:
+          name: Notify
+          command: 'echo "ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+workflows:
+  node-app:
+    jobs:
+      - lint:
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+            tags:
+              only: /^v.*$/
+      - test:
+          requires:
+            - lint
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+            tags:
+              only: /^v.*$/
+          matrix:
+            parameters:
+              node: ['18', '20']
+              os: [linux]
+      - build:
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - main
+                - /^release\/.*$/
+            tags:
+              only: /^v.*$/
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main
+  scheduled:
+    triggers:
+      - schedule:
+          cron: 0 3 * * 1
+          filters:
+            branches:
+              only: main
+    jobs:
+      - lint
+      - test:
+          requires:
+            - lint
+          matrix:
+            parameters:
+              node: ['18', '20']
+              os: [linux]
+      - build:
+          requires:
+            - test
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main

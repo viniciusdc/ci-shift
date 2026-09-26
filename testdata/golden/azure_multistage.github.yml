@@ -1,0 +1,165 @@
+# Converted by ci-shift from azure/multistage (Azure Pipelines) to GitHub Actions.
+# Review before use; 11 item(s) need attention:
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.test.steps[3]: task PublishTestResults@2 has no portable equivalent; it only converts back to Azure Pipelines
+#   - stages.Package.jobs.package.steps[3]: disabled step was dropped
+#   - stages.Deploy.jobs.release.strategy.runOnce.preDeploy: deployment lifecycle hook "preDeploy" is not portable and was dropped
+#   - stages.Deploy.jobs.release.steps[1]: step template "steps/notify.yml" is not resolved; convert it separately
+#   - stages.Deploy.jobs.notify.steps[1].condition: condition "and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))" could not be translated and was kept verbatim
+#   - on.push: GitHub cannot combine branches and branches-ignore; ignore filters were dropped
+#   - on.schedule: GitHub schedules always run on the default branch; branch filters [main] were dropped
+#   - jobs.test.steps[4]: azure step "PublishTestResults@2" has no GitHub equivalent; a failing placeholder step was emitted
+#   - jobs.notify.steps[2]: condition "and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))" (from azure) could not be translated and was dropped
+
+name: CI
+on:
+  push:
+    branches:
+      - main
+      - release/*
+    tags:
+      - v*
+    paths-ignore:
+      - docs/*
+  pull_request:
+    branches:
+      - main
+    paths:
+      - src/*
+  schedule:
+    - cron: 0 3 * * 1
+env:
+  buildConfiguration: Release
+  NODE_ENV: production
+  python_version: '3.12'
+jobs:
+  Build_lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    container: node:20
+    env:
+      STAGE_VAR: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - uses: actions/cache@v4
+        with:
+          path: $(Pipeline.Workspace)/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+      - name: Lint sources
+        run: |-
+          npm ci
+          npm run lint -- --config ${buildConfiguration}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  test:
+    needs: Build_lint
+    runs-on: ${{ matrix.imageName }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        ports:
+          - 5432:5432
+    strategy:
+      matrix:
+        include:
+          - imageName: ubuntu-latest
+            python_version: '3.11'
+          - imageName: macOS-latest
+            python_version: '3.12'
+    env:
+      STAGE_VAR: build
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+      - if: always()
+        run: |-
+          echo "sha ${GITHUB_SHA} on ${GITHUB_REF_NAME}"
+          echo "python ${{ matrix.python_version }}"
+          pytest --junitxml=out/results.xml
+        shell: bash
+        working-directory: ${{ github.workspace }}/tests
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.imageName }}-${{ matrix.python_version }}
+          path: out
+      - run: |-
+          echo "::error::ci-shift: port azure step 'PublishTestResults@2' manually"
+          exit 1
+  package:
+    needs:
+      - Build_lint
+      - test
+    if: github.ref == 'refs/heads/main'
+    runs-on:
+      - self-hosted
+      - linux
+      - SelfHosted
+    steps:
+      - name: Download test-results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+          path: out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: dist
+  Package_lint:
+    name: lint
+    needs:
+      - Build_lint
+      - test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo package lint
+  release:
+    name: Release
+    needs:
+      - package
+      - Package_lint
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    environment: production
+    steps:
+      - name: Download bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle
+          path: dist
+      - name: Download test-results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+          path: out
+      - run: ./deploy.sh ${GITHUB_RUN_NUMBER}
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  notify:
+    needs: release
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/hotfix/')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "$(pwd)" notified
+      - run: echo weird

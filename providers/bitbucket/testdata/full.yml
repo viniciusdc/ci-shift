@@ -1,0 +1,99 @@
+image: node:20
+
+definitions:
+  services:
+    postgres:
+      image: postgres:16
+      variables:
+        POSTGRES_PASSWORD: example
+    docker:
+      memory: 2048
+  caches:
+    npm-cache:
+      key:
+        files:
+          - package-lock.json
+      path: ~/.npm
+  steps:
+    - step: &build
+        name: Build
+        caches:
+          - node
+          - npm-cache
+        script:
+          - npm ci
+          - npm run build -- --sha $BITBUCKET_COMMIT
+        artifacts:
+          - dist/**
+
+options:
+  max-time: 30
+
+clone:
+  depth: 5
+  lfs: true
+
+pipelines:
+  default:
+    - step: *build
+    - parallel:
+        - step:
+            name: Unit tests
+            services:
+              - postgres
+            script:
+              - npm test -- --token $NPM_TOKEN
+            after-script:
+              - echo "exit code $BITBUCKET_EXIT_CODE"
+        - step:
+            name: Lint
+            script:
+              - npm run lint
+  branches:
+    main:
+      - step: *build
+      - stage:
+          name: Release
+          deployment: production
+          steps:
+            - step:
+                name: Publish
+                runs-on:
+                  - self.hosted
+                  - linux
+                  - big
+                max-time: 60
+                script:
+                  - npm publish
+                  - pipe: atlassian/slack-notify:2.1.0
+                    variables:
+                      WEBHOOK_URL: $SLACK_WEBHOOK
+                      MESSAGE: published
+  tags:
+    'v*':
+      - step:
+          name: Tag build
+          image: node:22
+          script:
+            - echo "$BITBUCKET_TAG"
+  pull-requests:
+    '**':
+      - step:
+          name: PR check
+          clone:
+            depth: full
+          script:
+            - npm test
+  custom:
+    deploy-staging:
+      - variables:
+          - name: TARGET
+      - step: *build
+      - step:
+          name: Deploy
+          trigger: manual
+          deployment: staging
+          artifacts:
+            download: false
+          script:
+            - ./deploy.sh

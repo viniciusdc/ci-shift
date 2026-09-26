@@ -1,0 +1,160 @@
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+      - release/*
+    exclude:
+      - experimental/*
+  tags:
+    include:
+      - v*
+  paths:
+    exclude:
+      - docs/*
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+
+schedules:
+  - cron: "0 3 * * 1"
+    displayName: Weekly
+    branches:
+      include:
+        - main
+    always: true
+
+resources:
+  containers:
+    - container: pg
+      image: postgres:16
+      env:
+        POSTGRES_PASSWORD: $(DB_PASSWORD)
+      ports:
+        - 5432:5432
+    - container: builder
+      image: node:20
+
+variables:
+  buildConfiguration: Release
+  NODE_ENV: production
+  python.version: "3.12"
+
+pool:
+  vmImage: ubuntu-22.04
+
+stages:
+  - stage: Build
+    variables:
+      STAGE_VAR: build
+    jobs:
+      - job: lint
+        displayName: Lint
+        container: builder
+        steps:
+          - checkout: self
+            fetchDepth: 1
+            submodules: recursive
+            lfs: true
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: npm | "$(Agent.OS)"
+              path: $(Pipeline.Workspace)/.npm
+          - script: |
+              npm ci
+              npm run lint -- --config $(buildConfiguration)
+            displayName: Lint sources
+            env:
+              NPM_TOKEN: $(NPM_TOKEN)
+
+      - job: test
+        dependsOn: lint
+        timeoutInMinutes: 30
+        continueOnError: true
+        pool:
+          vmImage: $(imageName)
+        strategy:
+          matrix:
+            linux:
+              imageName: ubuntu-latest
+              python.version: "3.11"
+            mac:
+              imageName: macOS-latest
+              python.version: "3.12"
+          maxParallel: 2
+        services:
+          postgres: pg
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(python.version)
+          - bash: |
+              echo "sha $(Build.SourceVersion) on $BUILD_SOURCEBRANCHNAME"
+              echo "python $PYTHON_VERSION"
+              pytest --junitxml=out/results.xml
+            workingDirectory: $(System.DefaultWorkingDirectory)/tests
+            condition: succeededOrFailed()
+          - publish: out
+            artifact: test-results
+            condition: always()
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFiles: '**/junit-*.xml'
+              testRunTitle: Python $(Build.BuildId)
+
+  - stage: Package
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: package
+        pool: SelfHosted
+        steps:
+          - checkout: none
+          - download: current
+            artifact: test-results
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: dist
+              artifact: bundle
+          - pwsh: Write-Host "done"
+            enabled: false
+
+      - job: lint
+        steps:
+          - script: echo package lint
+
+  - stage: Deploy
+    jobs:
+      - deployment: release
+        displayName: Release
+        environment: production.webserver
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+        strategy:
+          runOnce:
+            preDeploy:
+              steps:
+                - script: echo pre
+            deploy:
+              steps:
+                - script: ./deploy.sh $(Build.BuildNumber)
+                  env:
+                    TOKEN: $(DEPLOY_TOKEN)
+                - template: steps/notify.yml
+      - job: notify
+        dependsOn: release
+        condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/heads/hotfix/'))
+        steps:
+          - script: echo "$(pwd)" notified
+          - script: echo weird
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))

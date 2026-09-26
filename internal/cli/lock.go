@@ -1,0 +1,218 @@
+package cli
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	"github.com/viniciusdc/ci-shift/convert"
+	"github.com/viniciusdc/ci-shift/internal/buildinfo"
+	"github.com/viniciusdc/ci-shift/internal/lockfile"
+	"github.com/viniciusdc/ci-shift/schema"
+)
+
+// openLock loads the lockfile at path, or the nearest one from the working
+// directory when path is empty.
+func openLock(path string) (*lockfile.File, error) {
+	if path == "" {
+		found, err := lockfile.Find(".")
+		if err != nil {
+			return nil, err
+		}
+		path = found
+	}
+	return lockfile.Load(path)
+}
+
+// displayPath shortens absolute paths under the working directory.
+func displayPath(path string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, path); err == nil && !filepath.IsAbs(rel) && rel != "" && rel[0] != '.' {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+var errHandEdited = errors.New("edited by hand since cishift generated it")
+
+// guardHandEdits refuses to overwrite a recorded output whose content no
+// longer matches what cishift wrote, unless forced.
+func guardHandEdits(lf *lockfile.File, output string, force bool) error {
+	e, ok := lf.Get(output)
+	if !ok || force {
+		return nil
+	}
+	hash, err := lockfile.HashFile(lf.Abs(output))
+	if err != nil {
+		return nil // missing output: nothing to protect
+	}
+	if hash != e.OutputSHA256 {
+		return fmt.Errorf("%s was %w; use --force to overwrite it", output, errHandEdited)
+	}
+	return nil
+}
+
+// record stores the provenance of a generated file and saves the lockfile.
+func record(lf *lockfile.File, e lockfile.Entry, source, output []byte) error {
+	e.Tool = buildinfo.Version()
+	if doc, err := schema.Resolve(e.To, schema.Options{}); err == nil {
+		e.Schema = doc.Fingerprint()
+	}
+	e.SourceSHA256 = lockfile.Hash(source)
+	e.OutputSHA256 = lockfile.Hash(output)
+	lf.Put(e)
+	return lf.Save()
+}
+
+// regenerate converts an entry's source again with the current cishift.
+func regenerate(lf *lockfile.File, e lockfile.Entry) (source, output []byte, err error) {
+	source, err = os.ReadFile(lf.Abs(e.Source))
+	if err != nil {
+		return nil, nil, fmt.Errorf("source %s: %w", e.Source, err)
+	}
+	from, err := convert.Get(e.From)
+	if err != nil {
+		return nil, nil, err
+	}
+	to, err := convert.Get(e.To)
+	if err != nil {
+		return nil, nil, err
+	}
+	res, err := convert.Convert(source, from, to, convert.Options{Header: !e.NoHeader, SourceName: e.Source})
+	if err != nil {
+		return nil, nil, fmt.Errorf("convert %s: %w", e.Source, err)
+	}
+	return source, res.Output, nil
+}
+
+func newVerifyCmd(stdout io.Writer) *cobra.Command {
+	var lock string
+	cmd := &cobra.Command{
+		Use:   "verify",
+		Short: "Check that generated pipeline files are up to date and untouched",
+		Long: `verify checks every file recorded in the lockfile, offline, and fails when
+an output is missing or was edited by hand, when its source changed since it
+was generated, or when the installed cishift would now generate it
+differently. Run 'cishift sync' to regenerate.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lf, err := openLock(lock)
+			if err != nil {
+				return err
+			}
+			if len(lf.Generated) == 0 {
+				fmt.Fprintf(stdout, "no generated files recorded in %s\n", displayPath(lf.Path()))
+				return nil
+			}
+			current := buildinfo.Version()
+			failed := 0
+			for _, e := range lf.Generated {
+				problem, note := verifyEntry(lf, e, current)
+				if problem != "" {
+					failed++
+					fmt.Fprintf(stdout, "✗ %s: %s\n", e.Output, problem)
+					continue
+				}
+				fmt.Fprintf(stdout, "✓ %s (from %s)%s\n", e.Output, e.Source, note)
+			}
+			if failed > 0 {
+				fmt.Fprintf(stdout, "\n%d of %d generated file(s) need attention; run `cishift sync` to regenerate (add --force to overwrite hand edits)\n", failed, len(lf.Generated))
+				return ExitError{Code: 1}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&lock, "lock", "", "lockfile to verify (default: nearest "+lockfile.Name+")")
+	return cmd
+}
+
+func verifyEntry(lf *lockfile.File, e lockfile.Entry, current string) (problem, note string) {
+	out, err := os.ReadFile(lf.Abs(e.Output))
+	if err != nil {
+		return "missing (generated from " + e.Source + ")", ""
+	}
+	src, err := os.ReadFile(lf.Abs(e.Source))
+	if err != nil {
+		return "source " + e.Source + " is missing", ""
+	}
+	if lockfile.Hash(out) != e.OutputSHA256 {
+		return errHandEdited.Error(), ""
+	}
+	if lockfile.Hash(src) != e.SourceSHA256 {
+		return e.Source + " changed since it was generated", ""
+	}
+	_, regen, err := regenerate(lf, e)
+	if err != nil {
+		return err.Error(), ""
+	}
+	if !bytes.Equal(regen, out) {
+		return fmt.Sprintf("cishift %s generates different output than %s did", current, e.Tool), ""
+	}
+	if !lockfile.SameVersion(e.Tool, current) {
+		note = fmt.Sprintf("; generated by cishift %s, %s produces the same output", e.Tool, current)
+	}
+	return "", note
+}
+
+func newSyncCmd(stdout, stderr io.Writer) *cobra.Command {
+	var lock string
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Regenerate every pipeline file recorded in the lockfile",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lf, err := openLock(lock)
+			if err != nil {
+				return err
+			}
+			if len(lf.Generated) == 0 {
+				fmt.Fprintf(stdout, "no generated files recorded in %s\n", displayPath(lf.Path()))
+				return nil
+			}
+			failed := 0
+			for _, e := range lf.Generated {
+				if err := guardHandEdits(lf, e.Output, force); err != nil {
+					failed++
+					fmt.Fprintf(stdout, "skipped %s: edited by hand (use --force to overwrite)\n", e.Output)
+					continue
+				}
+				src, out, err := regenerate(lf, e)
+				if err != nil {
+					failed++
+					fmt.Fprintf(stdout, "failed %s: %v\n", e.Output, err)
+					continue
+				}
+				current, _ := os.ReadFile(lf.Abs(e.Output))
+				unchanged := bytes.Equal(current, out) && lockfile.SameVersion(e.Tool, buildinfo.Version())
+				if !bytes.Equal(current, out) {
+					if err := writeFile(lf.Abs(e.Output), out); err != nil {
+						return err
+					}
+				}
+				if err := record(lf, e, src, out); err != nil {
+					return err
+				}
+				if unchanged {
+					fmt.Fprintf(stdout, "up to date %s\n", e.Output)
+				} else {
+					fmt.Fprintf(stdout, "regenerated %s (from %s)\n", e.Output, e.Source)
+				}
+			}
+			if failed > 0 {
+				fmt.Fprintf(stderr, "%d file(s) were not regenerated\n", failed)
+				return ExitError{Code: 1}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&lock, "lock", "", "lockfile to sync (default: nearest "+lockfile.Name+")")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite outputs that were edited by hand")
+	return cmd
+}

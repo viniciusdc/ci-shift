@@ -1,0 +1,127 @@
+# Converted by ci-shift from circleci/app (CircleCI) to Bitbucket Pipelines.
+# Review before use; 4 item(s) need attention:
+#   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
+#   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
+#   - pipelines.custom.scheduled: create a schedule for the custom pipeline "scheduled" in Repository settings > Pipelines > Schedules with cron 0 3 * * * (UTC)
+#   - deploy.steps[2]: circleci step "node/install-packages" has no Bitbucket equivalent; a failing placeholder command was emitted
+
+image: atlassian/default-image:4
+definitions:
+  caches:
+    v1-deps:
+      key:
+        files:
+          - package-lock.json
+      path: ~/.npm
+  services:
+    db:
+      image: postgres:16
+      variables:
+        POSTGRES_PASSWORD: example
+pipelines:
+  branches:
+    '{main,release/*}':
+      - step:
+          name: build
+          image: cimg/node:20.11
+          caches:
+            - v1-deps
+          services:
+            - db
+          script:
+            - export NODE_ENV=test
+            - npm ci
+            - npm run build -- --sha ${BITBUCKET_COMMIT}
+          artifacts:
+            - dist
+      - parallel:
+          - step:
+              name: test (18)
+              image: cimg/node:18
+              script:
+                - export node=18
+                - |-
+                  (
+                    export NODE_VERSION=18
+                    npm test
+                  )
+              after-script:
+                - ./upload.sh --token ${CODECOV_TOKEN}
+              artifacts:
+                - test-results
+          - step:
+              name: test (20)
+              image: cimg/node:20
+              script:
+                - export node=20
+                - |-
+                  (
+                    export NODE_VERSION=20
+                    npm test
+                  )
+              after-script:
+                - ./upload.sh --token ${CODECOV_TOKEN}
+              artifacts:
+                - test-results
+      - step:
+          name: deploy
+          trigger: manual
+          script:
+            - 'echo "ci-shift: port circleci step ''node/install-packages'' manually" && exit 1'
+            - ./deploy.sh staging ${BITBUCKET_BRANCH}
+  custom:
+    scheduled:
+      - parallel:
+          - step:
+              name: build
+              image: cimg/node:20.11
+              caches:
+                - v1-deps
+              services:
+                - db
+              script:
+                - export NODE_ENV=test
+                - npm ci
+                - npm run build -- --sha ${BITBUCKET_COMMIT}
+              artifacts:
+                - dist
+          - step:
+              name: nightly-audit
+              image: cimg/base:stable
+              script:
+                - ./audit.sh
+      - parallel:
+          - step:
+              name: test (18)
+              image: cimg/node:18
+              script:
+                - export node=18
+                - |-
+                  (
+                    export NODE_VERSION=18
+                    npm test
+                  )
+              after-script:
+                - ./upload.sh --token ${CODECOV_TOKEN}
+              artifacts:
+                - test-results
+          - step:
+              name: test (20)
+              image: cimg/node:20
+              script:
+                - export node=20
+                - |-
+                  (
+                    export NODE_VERSION=20
+                    npm test
+                  )
+              after-script:
+                - ./upload.sh --token ${CODECOV_TOKEN}
+              artifacts:
+                - test-results
+      - step:
+          name: deploy
+          trigger: manual
+          script:
+            - 'echo "ci-shift: port circleci step ''node/install-packages'' manually" && exit 1'
+            - ./deploy.sh staging ${BITBUCKET_BRANCH}

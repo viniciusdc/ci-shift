@@ -1,39 +1,44 @@
-BINARY_NAME = cifusion
-MODULE_DIR = cifusion
+BINARY_NAME = cishift
 INSTALL_DIR = $(HOME)/.local/bin
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS = -s -w -X github.com/viniciusdc/ci-shift/internal/buildinfo.version=$(VERSION)
 
-.PHONY: all build clean fmt lint test run install uninstall install-tools ci
+.PHONY: all build clean fmt lint test golden install uninstall install-tools schemas ci
 
 all: build
 
 build:
-	cd $(MODULE_DIR) && go build -o $(BINARY_NAME) .
-
-run: build
-	./$(MODULE_DIR)/$(BINARY_NAME)
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) ./cmd/cishift
 
 clean:
-	cd $(MODULE_DIR) && rm -f $(BINARY_NAME)
+	rm -f $(BINARY_NAME)
 
 fmt:
-	cd $(MODULE_DIR) && go fmt ./...
+	gofmt -w .
 
 lint:
-	cd $(MODULE_DIR) && golangci-lint run
+	golangci-lint run ./...
 
 test:
-	cd $(MODULE_DIR) && go test -v ./...
+	go test ./...
+
+# Regenerate golden conversion outputs after an intentional change.
+golden:
+	go test ./convert/ -run TestGolden -update
 
 install: build
 	mkdir -p $(INSTALL_DIR)
-	cp $(MODULE_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/
+	cp $(BINARY_NAME) $(INSTALL_DIR)/
 	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR). Ensure $(INSTALL_DIR) is in your PATH."
 
 uninstall:
 	rm -f $(INSTALL_DIR)/$(BINARY_NAME)
-	@echo "Removed $(BINARY_NAME) from $(INSTALL_DIR)."
 
 install-tools:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 
-ci: fmt lint test build
+# Refresh the embedded schema snapshots from their upstream sources.
+schemas:
+	go run ./internal/tools/updateschemas
+
+ci: lint test build

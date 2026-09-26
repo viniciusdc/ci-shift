@@ -1,0 +1,117 @@
+# Converted by ci-shift from github/node-app (GitHub Actions) to Azure Pipelines.
+# Review before use; 3 item(s) need attention:
+#   - schedules[0]: Azure schedules need a branch filter; assuming the default branch is "main"
+#   - jobs.lint.steps[2]: Cache@2 does not expand ~ in "~/.npm"; use an absolute path such as $(Pipeline.Workspace)/...
+#   - jobs.deploy_job.steps[2]: github step "slackapi/slack-github-action@v1" has no Azure Pipelines equivalent; a failing placeholder step was emitted
+
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+  tags:
+    include:
+      - v*
+pr:
+  - main
+schedules:
+  - cron: 0 3 * * 1
+    branches:
+      include:
+        - main
+    always: 'true'
+variables:
+  NODE_ENV: test
+  REGISTRY: ghcr.io
+resources:
+  containers:
+    - container: postgres
+      image: postgres:16
+      env:
+        POSTGRES_PASSWORD: postgres
+      ports:
+        - 5432:5432
+jobs:
+  - job: lint
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+      - task: NodeTool@0
+        inputs:
+          versionSpec: 20.x
+      - task: Cache@2
+        displayName: Cache node modules
+        inputs:
+          key: npm | "$(Agent.OS)" | package-lock.json
+          restoreKeys: npm | "$(Agent.OS)"
+          path: ~/.npm
+      - script: npm ci
+      - script: npm run lint
+  - job: test
+    dependsOn: lint
+    timeoutInMinutes: '20'
+    pool:
+      vmImage: ubuntu-latest
+    services:
+      postgres: postgres
+    strategy:
+      matrix:
+        node_18_linux:
+          node: '18'
+          os: linux
+        node_20_linux:
+          node: '20'
+          os: linux
+    steps:
+      - checkout: self
+        fetchDepth: '0'
+      - task: NodeTool@0
+        inputs:
+          versionSpec: $(node)
+      - script: npm ci
+      - script: npm test -- --coverage
+        displayName: Run tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/app
+      - publish: coverage
+        artifact: coverage-$(node)
+        condition: always()
+  - job: build
+    dependsOn: test
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '20'
+      - script: |-
+          npm ci
+          npm run build
+          echo "Built $(Build.SourceVersion) on $(Build.SourceBranchName)"
+      - publish: dist
+        artifact: dist
+  - deployment: deploy_job
+    dependsOn: build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    pool:
+      vmImage: ubuntu-latest
+    environment: production
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: none
+            - task: DownloadPipelineArtifact@2
+              displayName: Download dist
+              inputs:
+                buildType: current
+                artifactName: dist
+                targetPath: $(Build.SourcesDirectory)/dist
+            - script: ./scripts/deploy.sh dist "${DEPLOY_TOKEN}"
+              displayName: Deploy
+              env:
+                DEPLOY_TOKEN: $(DEPLOY_TOKEN)
+            - script: 'echo "##vso[task.logissue type=error]ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+              displayName: Notify

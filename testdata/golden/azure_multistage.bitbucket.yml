@@ -1,0 +1,582 @@
+# Converted by ci-shift from azure/multistage (Azure Pipelines) to Bitbucket Pipelines.
+# Review before use; 13 item(s) need attention:
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim
+#   - stages.Build.jobs.test.steps[3]: task PublishTestResults@2 has no portable equivalent; it only converts back to Azure Pipelines
+#   - stages.Package.jobs.package.steps[3]: disabled step was dropped
+#   - stages.Deploy.jobs.release.strategy.runOnce.preDeploy: deployment lifecycle hook "preDeploy" is not portable and was dropped
+#   - stages.Deploy.jobs.release.steps[1]: step template "steps/notify.yml" is not resolved; convert it separately
+#   - stages.Deploy.jobs.notify.steps[1].condition: condition "and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))" could not be translated and was kept verbatim
+#   - pipelines: branch ignore filters [experimental/*] have no Bitbucket equivalent and were dropped
+#   - pipelines.custom.scheduled: create a schedule for the custom pipeline "scheduled" in Repository settings > Pipelines > Schedules with cron 0 3 * * 1 (UTC)
+#   - test: Bitbucket steps cannot be allowed to fail; a failure of this step stops the pipeline
+#   - test.steps[2]: Bitbucket uploads artifacts only when the step succeeds; when: always was dropped
+#   - test.steps[3]: azure step "PublishTestResults@2" has no Bitbucket equivalent; a failing placeholder command was emitted
+#   - notify.steps[2]: step condition could not be translated; the step always runs
+
+image: atlassian/default-image:4
+definitions:
+  caches:
+    npm:
+      key:
+        files:
+          - package-lock.json
+      path: $(Pipeline.Workspace)/.npm
+  services:
+    postgres:
+      image: postgres:16
+      variables:
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Lint
+          image: node:20
+          clone:
+            depth: 1
+            lfs: true
+          caches:
+            - npm
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - export STAGE_VAR=build
+            - git submodule update --init --recursive
+            - |-
+              # Lint sources
+              (
+                export NPM_TOKEN="${NPM_TOKEN}"
+                npm ci
+                npm run lint -- --config ${buildConfiguration}
+              )
+          condition:
+            changesets:
+              excludePaths:
+                - docs/*
+      - parallel:
+          - step:
+              name: test (ubuntu-latest, 3.11)
+              image: python:3.11
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=ubuntu-latest
+                - export python_version=3.11
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.11"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+          - step:
+              name: test (macOS-latest, 3.12)
+              image: python:3.12
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=macOS-latest
+                - export python_version=3.12
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.12"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+      - parallel:
+          - step:
+              name: package
+              runs-on:
+                - self.hosted
+                - linux
+                - SelfHosted
+              clone:
+                enabled: false
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+              artifacts:
+                - dist
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+          - step:
+              name: lint
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - echo package lint
+              artifacts:
+                download: false
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+      - step:
+          name: notify
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - echo "$(pwd)" notified
+            - echo weird
+          artifacts:
+            download: false
+          condition:
+            changesets:
+              excludePaths:
+                - docs/*
+    release/*:
+      - step:
+          name: Lint
+          image: node:20
+          clone:
+            depth: 1
+            lfs: true
+          caches:
+            - npm
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - export STAGE_VAR=build
+            - git submodule update --init --recursive
+            - |-
+              # Lint sources
+              (
+                export NPM_TOKEN="${NPM_TOKEN}"
+                npm ci
+                npm run lint -- --config ${buildConfiguration}
+              )
+          condition:
+            changesets:
+              excludePaths:
+                - docs/*
+      - parallel:
+          - step:
+              name: test (ubuntu-latest, 3.11)
+              image: python:3.11
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=ubuntu-latest
+                - export python_version=3.11
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.11"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+          - step:
+              name: test (macOS-latest, 3.12)
+              image: python:3.12
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=macOS-latest
+                - export python_version=3.12
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.12"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+    hotfix/*:
+      - step:
+          name: Lint
+          image: node:20
+          clone:
+            depth: 1
+            lfs: true
+          caches:
+            - npm
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - export STAGE_VAR=build
+            - git submodule update --init --recursive
+            - |-
+              # Lint sources
+              (
+                export NPM_TOKEN="${NPM_TOKEN}"
+                npm ci
+                npm run lint -- --config ${buildConfiguration}
+              )
+          condition:
+            changesets:
+              excludePaths:
+                - docs/*
+      - parallel:
+          - step:
+              name: test (ubuntu-latest, 3.11)
+              image: python:3.11
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=ubuntu-latest
+                - export python_version=3.11
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.11"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+          - step:
+              name: test (macOS-latest, 3.12)
+              image: python:3.12
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=macOS-latest
+                - export python_version=3.12
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.12"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  excludePaths:
+                    - docs/*
+      - step:
+          name: notify
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - echo "$(pwd)" notified
+            - echo weird
+          artifacts:
+            download: false
+          condition:
+            changesets:
+              excludePaths:
+                - docs/*
+  tags:
+    v*:
+      - step:
+          name: Lint
+          image: node:20
+          clone:
+            depth: 1
+            lfs: true
+          caches:
+            - npm
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - export STAGE_VAR=build
+            - git submodule update --init --recursive
+            - |-
+              # Lint sources
+              (
+                export NPM_TOKEN="${NPM_TOKEN}"
+                npm ci
+                npm run lint -- --config ${buildConfiguration}
+              )
+      - parallel:
+          - step:
+              name: test (ubuntu-latest, 3.11)
+              image: python:3.11
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=ubuntu-latest
+                - export python_version=3.11
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.11"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+          - step:
+              name: test (macOS-latest, 3.12)
+              image: python:3.12
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=macOS-latest
+                - export python_version=3.12
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.12"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+      - step:
+          name: Release
+          clone:
+            enabled: false
+          deployment: production
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - |-
+              (
+                export TOKEN="${DEPLOY_TOKEN}"
+                ./deploy.sh ${BITBUCKET_BUILD_NUMBER}
+              )
+  pull-requests:
+    '**':
+      - step:
+          name: Lint
+          image: node:20
+          clone:
+            depth: 1
+            lfs: true
+          caches:
+            - npm
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - export STAGE_VAR=build
+            - git submodule update --init --recursive
+            - |-
+              # Lint sources
+              (
+                export NPM_TOKEN="${NPM_TOKEN}"
+                npm ci
+                npm run lint -- --config ${buildConfiguration}
+              )
+          condition:
+            changesets:
+              includePaths:
+                - src/*
+      - parallel:
+          - step:
+              name: test (ubuntu-latest, 3.11)
+              image: python:3.11
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=ubuntu-latest
+                - export python_version=3.11
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.11"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  includePaths:
+                    - src/*
+          - step:
+              name: test (macOS-latest, 3.12)
+              image: python:3.12
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=macOS-latest
+                - export python_version=3.12
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.12"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+              condition:
+                changesets:
+                  includePaths:
+                    - src/*
+  custom:
+    scheduled:
+      - step:
+          name: Lint
+          image: node:20
+          clone:
+            depth: 1
+            lfs: true
+          caches:
+            - npm
+          script:
+            - export buildConfiguration=Release
+            - export NODE_ENV=production
+            - export python_version=3.12
+            - export STAGE_VAR=build
+            - git submodule update --init --recursive
+            - |-
+              # Lint sources
+              (
+                export NPM_TOKEN="${NPM_TOKEN}"
+                npm ci
+                npm run lint -- --config ${buildConfiguration}
+              )
+      - parallel:
+          - step:
+              name: test (ubuntu-latest, 3.11)
+              image: python:3.11
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=ubuntu-latest
+                - export python_version=3.11
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.11"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
+          - step:
+              name: test (macOS-latest, 3.12)
+              image: python:3.12
+              max-time: 30
+              services:
+                - postgres
+              script:
+                - export buildConfiguration=Release
+                - export NODE_ENV=production
+                - export python_version=3.12
+                - export imageName=macOS-latest
+                - export python_version=3.12
+                - export STAGE_VAR=build
+                - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
+              after-script:
+                - |-
+                  (
+                    cd "${BITBUCKET_CLONE_DIR}/tests"
+                    echo "sha ${BITBUCKET_COMMIT} on ${BITBUCKET_BRANCH}"
+                    echo "python 3.12"
+                    pytest --junitxml=out/results.xml
+                  )
+              artifacts:
+                - out
