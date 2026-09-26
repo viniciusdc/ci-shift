@@ -23,11 +23,11 @@ test:
     - go test ./...
   when: sometimes
 -- display.sh --
-cishift check .gitlab-ci.yml broken.yml --provider gitlab
-# .gitlab-ci.yml: valid GitLab CI/CD configuration
-# broken.yml: invalid GitLab CI/CD configuration
-#   - /test/when: value must be one of 'on_success', 'on_failure', 'always', 'never',
-#     'manual', 'delayed'
+$ cishift check .gitlab-ci.yml broken.yml --provider gitlab
+.gitlab-ci.yml: valid GitLab CI/CD configuration
+broken.yml: invalid GitLab CI/CD configuration
+  - /test/when: value must be one of 'on_success', 'on_failure', 'always', 'never',
+    'manual', 'delayed'
 
-echo $?
-# 1
+$ echo $?
+1

@@ -35,19 +35,19 @@ test:
   script:
     - go test ./...
 -- display.sh --
-cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
-# wrote .github/workflows/ci.yml (GitLab CI/CD -> GitHub Actions)
-# recorded in .cishift.lock
+$ cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
+wrote .github/workflows/ci.yml (GitLab CI/CD -> GitHub Actions)
+recorded in .cishift.lock
 
-echo "# tweak" >> .github/workflows/ci.yml
-cishift verify
-# ✗ .github/workflows/ci.yml: edited by hand since cishift generated it
-#
-# 1 of 1 generated file(s) need attention; run `cishift sync` to regenerate (add
-# --force to overwrite hand edits)
+$ echo "# tweak" >> .github/workflows/ci.yml
+$ cishift verify
+✗ .github/workflows/ci.yml: edited by hand since cishift generated it
 
-cishift sync --force
-# regenerated .github/workflows/ci.yml (from .gitlab-ci.yml)
+1 of 1 generated file(s) need attention; run `cishift sync` to regenerate (add
+--force to overwrite hand edits)
 
-cishift verify
-# ✓ .github/workflows/ci.yml (from .gitlab-ci.yml)
+$ cishift sync --force
+regenerated .github/workflows/ci.yml (from .gitlab-ci.yml)
+
+$ cishift verify
+✓ .github/workflows/ci.yml (from .gitlab-ci.yml)

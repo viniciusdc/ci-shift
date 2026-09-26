@@ -34,7 +34,7 @@ pipelines:
         script:
           - make test
 -- display.sh --
-cishift detect pipeline-a.yml pipeline-b.yml pipeline-c.yml
-# pipeline-a.yml: github
-# pipeline-b.yml: circleci
-# pipeline-c.yml: bitbucket
+$ cishift detect pipeline-a.yml pipeline-b.yml pipeline-c.yml
+pipeline-a.yml: github
+pipeline-b.yml: circleci
+pipeline-c.yml: bitbucket
