@@ -134,3 +134,13 @@ func TestCommonDir(t *testing.T) {
 		}
 	}
 }
+
+func TestRunsOnRejectsForeignImages(t *testing.T) {
+	var d ir.Diagnostics
+	if got := runsOn(ir.Runner{VMImage: "ubuntu-2204:current"}, &d, "x"); got != "ubuntu-latest" {
+		t.Fatalf("runsOn = %v", got)
+	}
+	if got := runsOn(ir.Runner{VMImage: "ubuntu-22.04"}, &d, "x"); got != "ubuntu-22.04" {
+		t.Fatalf("runsOn = %v", got)
+	}
+}

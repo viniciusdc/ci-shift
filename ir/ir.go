@@ -46,7 +46,10 @@ func (t Triggers) Empty() bool {
 	return t.Push == nil && t.PullRequest == nil && len(t.Schedules) == 0 && !t.Manual
 }
 
-// PushTrigger runs the pipeline on pushes. Empty filters mean "any".
+// PushTrigger runs the pipeline on pushes. With neither Branches nor Tags
+// set, every push triggers. When only one of them is set, only that kind
+// of ref triggers: Tags alone means "tags only". Use Branches ["*"] with
+// Tags to mean "every branch plus these tags".
 type PushTrigger struct {
 	Branches       []string
 	BranchesIgnore []string
@@ -193,7 +196,9 @@ type Step struct {
 	Run   string
 	Shell string
 
-	WorkingDir     string
+	WorkingDir string
+	// Env holds step variables. Values are literal apart from canonical
+	// references, which emitters translate.
 	Env            []KV
 	If             *Condition
 	AllowFailure   bool

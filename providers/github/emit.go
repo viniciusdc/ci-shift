@@ -130,7 +130,8 @@ func runsOn(r ir.Runner, d *ir.Diagnostics, path string) any {
 			return toGH(r.VMImage, false)
 		}
 		for _, prefix := range []string{"ubuntu-", "windows-", "macos-"} {
-			if strings.HasPrefix(img, prefix) {
+			// Images such as CircleCI's "ubuntu-2204:current" are not labels.
+			if strings.HasPrefix(img, prefix) && !strings.ContainsAny(img, ":/ ") {
 				return img
 			}
 		}
