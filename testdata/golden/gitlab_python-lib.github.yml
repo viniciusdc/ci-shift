@@ -1,4 +1,4 @@
-# Converted by cistela from gitlab/python-lib (GitLab CI/CD) to GitHub Actions.
+# Converted by ci-shift from gitlab/python-lib (GitLab CI/CD) to GitHub Actions.
 # Review before use.
 
 name: CI

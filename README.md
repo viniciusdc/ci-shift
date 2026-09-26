@@ -1,8 +1,8 @@
-# cistela
+# ci-shift
 
-**A Rosetta Stone for CI/CD pipelines.** `cistela` translates pipeline
-configurations between providers and validates them against each provider's
-official JSON schema.
+**Shift CI/CD pipelines between providers.** `cishift` translates pipeline
+configurations from one CI provider to another and checks them against each
+provider's official JSON schema.
 
 | Provider | Name | Default file |
 |---|---|---|
@@ -22,41 +22,41 @@ model (`ir`) and an emitter back out of it:
  bitbucket-pipelines.yml ┘                └──────► ...
 ```
 
-> *Stela*: the Rosetta Stone is a stela. *Cistella* is also Latin for
-> "little basket", which fits a tool that carries pipelines around.
-
 ## Install
 
 ```bash
-go install github.com/viniciusdc/cistela@latest
+go install github.com/viniciusdc/ci-shift/cmd/cishift@latest
 # or from a checkout
-make build && ./cistela --help
+make build && ./cishift --help
 ```
 
 ## Usage
 
 ```bash
-# Convert (the source provider is detected from the path/content)
-cistela convert .gitlab-ci.yml --to github -o .github/workflows/ci.yml
+# Convert: give a file and a target (the source provider is detected)
+cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
 
 # Check the result against the target schema; fail on lossy conversions
-cistela convert .circleci/config.yml --to azure --check --strict
+cishift .circleci/config.yml --to azure --check --strict
 
 # Read from stdin
-cat bitbucket-pipelines.yml | cistela convert - --from bitbucket --to gitlab
+cat bitbucket-pipelines.yml | cishift - --from bitbucket --to gitlab
 
-# Validate files against their provider schema
-cistela validate .github/workflows/*.yml
-cistela validate --latest .gitlab-ci.yml   # use the newest upstream schema
+# Check files against their provider schema
+cishift check .github/workflows/*.yml
+cishift check --latest .gitlab-ci.yml   # use the newest upstream schema
 
 # Which provider is this file for?
-cistela detect some-pipeline.yml
+cishift detect some-pipeline.yml
 
-cistela providers
+cishift providers
 ```
 
+`cishift convert <file> --to <provider>` and `cishift validate` still work
+as aliases, for scripts that prefer explicit verbs.
+
 Converted files start with a comment header naming the source. It also lists
-every **warning**: anything cistela dropped or approximated, such as a
+every **warning**: anything ci-shift dropped or approximated, such as a
 GitHub Marketplace action with no equivalent, or a GitLab `rules:changes`.
 Warnings also go to stderr. `--strict` turns them into a non-zero exit code,
 which is useful in CI.
@@ -91,17 +91,17 @@ expose secrets automatically.
 
 - Includes and templates (`include:`, Azure `template:`, CircleCI orbs) are
   not resolved. Convert the referenced files separately.
-- Provider-specific expressions that cistela cannot parse (e.g. GitHub
+- Provider-specific expressions that ci-shift cannot parse (e.g. GitHub
   `contains(...)` conditions or job outputs) are reported and dropped.
-- Schedules on GitLab and Bitbucket live in project settings, so cistela
+- Schedules on GitLab and Bitbucket live in project settings, so ci-shift
   tells you which cron expression to create there.
 
 ## Library use
 
 ```go
 import (
-	"github.com/viniciusdc/cistela/convert"
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/convert"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 from, _ := convert.Get("gitlab")
@@ -120,6 +120,7 @@ providers/*/    one parser + emitter per provider
 convert/        provider registry, detection, conversion
 schema/         JSON schema validation (embedded snapshots in schema/snapshots)
 internal/cli/   cobra commands
+cmd/cishift/    the cishift binary
 internal/yamlx/ order-preserving YAML read/write helpers
 testdata/       sample pipelines and golden conversion outputs
 ```

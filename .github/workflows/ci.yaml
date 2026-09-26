@@ -26,9 +26,9 @@ jobs:
 
       - name: Dogfood - validate and convert this workflow
         run: |
-          ./cistela validate .github/workflows/ci.yaml
+          ./cishift check .github/workflows/ci.yaml
           for target in gitlab circleci azure bitbucket; do
-            ./cistela convert .github/workflows/ci.yaml --to "$target" --check -q > /dev/null
+            ./cishift .github/workflows/ci.yaml --to "$target" --check -q > /dev/null
           done
 
   lint:

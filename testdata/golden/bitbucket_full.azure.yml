@@ -1,4 +1,4 @@
-# Converted by cistela from bitbucket/full (Bitbucket Pipelines) to Azure Pipelines.
+# Converted by ci-shift from bitbucket/full (Bitbucket Pipelines) to Azure Pipelines.
 # Review before use; 11 item(s) need attention:
 #   - pipelines.custom: custom pipelines run manually or from schedules configured in Repository settings > Pipelines > Schedules; schedules are not stored in the file and were not converted
 #   - pipelines.branches.main[1].stage.steps[0].step.script[1]: Bitbucket pipe "atlassian/slack-notify:2.1.0" only exists on Bitbucket Pipelines
@@ -147,7 +147,7 @@ jobs:
                 artifactName: main-build
                 targetPath: $(Build.SourcesDirectory)/dist
             - script: npm publish
-            - script: 'echo "##vso[task.logissue type=error]cistela: port bitbucket step ''atlassian/slack-notify:2.1.0'' manually" && exit 1'
+            - script: 'echo "##vso[task.logissue type=error]ci-shift: port bitbucket step ''atlassian/slack-notify:2.1.0'' manually" && exit 1'
   - job: tag_v_tag_build
     displayName: Tag build
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))

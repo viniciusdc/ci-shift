@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 var jobIDRe = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_-]*$`)
@@ -409,7 +409,7 @@ func emitStep(p *ir.Pipeline, j *ir.Job, st *ir.Step, path string, d *ir.Diagnos
 	case ir.StepAction:
 		if st.UsesFrom != "github" {
 			d.Warnf(path, "%s step %q has no GitHub equivalent; a failing placeholder step was emitted", st.UsesFrom, st.Uses)
-			m.Set("run", fmt.Sprintf("echo \"::error::cistela: port %s step '%s' manually\"\nexit 1", st.UsesFrom, st.Uses))
+			m.Set("run", fmt.Sprintf("echo \"::error::ci-shift: port %s step '%s' manually\"\nexit 1", st.UsesFrom, st.Uses))
 			return []any{m}
 		}
 		m.Set("uses", st.Uses)

@@ -1,4 +1,4 @@
-# Converted by cistela from gitlab/python-lib (GitLab CI/CD) to Bitbucket Pipelines.
+# Converted by ci-shift from gitlab/python-lib (GitLab CI/CD) to Bitbucket Pipelines.
 # Review before use; 1 item(s) need attention:
 #   - pytest.steps[4]: Bitbucket uploads artifacts only when the step succeeds; when: always was dropped
 

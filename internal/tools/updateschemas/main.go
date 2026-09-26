@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 func main() {

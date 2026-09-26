@@ -1,4 +1,4 @@
-# Converted by cistela from azure/multistage (Azure Pipelines) to Azure Pipelines.
+# Converted by ci-shift from azure/multistage (Azure Pipelines) to Azure Pipelines.
 # Review before use; 8 item(s) need attention:
 #   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
 #   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim

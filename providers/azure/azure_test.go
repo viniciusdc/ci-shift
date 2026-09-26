@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/viniciusdc/cistela/ir"
-	"github.com/viniciusdc/cistela/providers/github"
-	"github.com/viniciusdc/cistela/providers/gitlab"
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/ir"
+	"github.com/viniciusdc/ci-shift/providers/github"
+	"github.com/viniciusdc/ci-shift/providers/gitlab"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 func readFixture(t *testing.T, name string) []byte {
@@ -446,7 +446,7 @@ func TestEmitDetails(t *testing.T) {
 		"script: echo $(node) ${OTHER}",
 		"TOKEN: $(TOKEN)",
 		"OTHER: $(OTHER)",
-		"##vso[task.logissue type=error]cistela: port circleci step ''orb/foo'' manually",
+		"##vso[task.logissue type=error]ci-shift: port circleci step ''orb/foo'' manually",
 		"node_18:",
 	} {
 		if !strings.Contains(s, want) {

@@ -1,4 +1,4 @@
-module github.com/viniciusdc/cistela
+module github.com/viniciusdc/ci-shift
 
 go 1.22
 

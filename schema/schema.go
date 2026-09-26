@@ -25,7 +25,7 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
 )
 
 //go:embed snapshots/*.json
@@ -148,7 +148,7 @@ func download(src Source, opts Options) ([]byte, error) {
 		if err != nil {
 			base = os.TempDir()
 		}
-		dir = filepath.Join(base, "cistela", "schemas")
+		dir = filepath.Join(base, "ci-shift", "schemas")
 	}
 	cached := filepath.Join(dir, src.file())
 	if st, err := os.Stat(cached); err == nil && time.Since(st.ModTime()) < 24*time.Hour {

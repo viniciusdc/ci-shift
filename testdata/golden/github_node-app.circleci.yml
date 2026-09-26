@@ -1,4 +1,4 @@
-# Converted by cistela from github/node-app (GitHub Actions) to CircleCI.
+# Converted by ci-shift from github/node-app (GitHub Actions) to CircleCI.
 # Review before use; 6 item(s) need attention:
 #   - jobs.test.steps[3]: every matrix instance persists the same workspace paths, which CircleCI rejects as a conflict; persist per-instance directories
 #   - jobs.test: CircleCI has no job timeout; the 20 minute limit was dropped (steps fail after 10 minutes without output)
@@ -93,7 +93,7 @@ jobs:
           command: ./scripts/deploy.sh dist "${DEPLOY_TOKEN}"
       - run:
           name: Notify
-          command: 'echo "cistela: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+          command: 'echo "ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
 workflows:
   node-app:
     jobs:

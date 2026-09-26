@@ -1,4 +1,4 @@
-# Converted by cistela from circleci/app (CircleCI) to GitLab CI/CD.
+# Converted by ci-shift from circleci/app (CircleCI) to GitLab CI/CD.
 # Review before use; 4 item(s) need attention:
 #   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
 #   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
@@ -65,7 +65,7 @@ deploy:
   needs:
     - test
   script:
-    - 'echo "cistela: port circleci step ''node/install-packages'' manually" && exit 1'
+    - 'echo "ci-shift: port circleci step ''node/install-packages'' manually" && exit 1'
     - ./deploy.sh staging ${CI_COMMIT_BRANCH}
   rules:
     - when: manual

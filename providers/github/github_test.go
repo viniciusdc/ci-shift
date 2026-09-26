@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/viniciusdc/cistela/ir"
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/ir"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 func parseFixture(t *testing.T) *ir.Pipeline {

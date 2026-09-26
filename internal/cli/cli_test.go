@@ -16,7 +16,7 @@ func run(t *testing.T, stdin string, args ...string) (code int, stdout, stderr s
 }
 
 func TestValidate(t *testing.T) {
-	code, out, _ := run(t, "", "validate", "../../testdata/validate-valid-github.yml", "--provider", "github")
+	code, out, _ := run(t, "", "check", "../../testdata/validate-valid-github.yml", "--provider", "github")
 	if code != 0 || !strings.Contains(out, "valid GitHub Actions configuration") {
 		t.Fatalf("code=%d out=%s", code, out)
 	}
@@ -32,7 +32,7 @@ func TestConvertStdinToFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	dst := filepath.Join(t.TempDir(), "wf", "ci.yml")
-	code, _, stderr := run(t, string(src), "convert", "-", "--from", "gitlab", "--to", "gh", "-o", dst, "--check")
+	code, _, stderr := run(t, string(src), "-", "--from", "gitlab", "--to", "gh", "-o", dst, "--check")
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -40,7 +40,7 @@ func TestConvertStdinToFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(out), "# Converted by cistela from stdin (GitLab CI/CD) to GitHub Actions.") {
+	if !strings.HasPrefix(string(out), "# Converted by ci-shift from stdin (GitLab CI/CD) to GitHub Actions.") {
 		t.Fatalf("missing header:\n%s", out)
 	}
 	if !strings.Contains(stderr, "wrote "+dst) {
@@ -49,7 +49,7 @@ func TestConvertStdinToFile(t *testing.T) {
 }
 
 func TestConvertStrict(t *testing.T) {
-	code, out, stderr := run(t, "", "convert", "../../testdata/github/node-app.yml", "--to", "gitlab", "--strict", "--no-header")
+	code, out, stderr := run(t, "", "../../testdata/github/node-app.yml", "--to", "gitlab", "--strict", "--no-header")
 	if code != 1 {
 		t.Fatalf("expected strict failure, code=%d", code)
 	}
@@ -73,12 +73,33 @@ func TestDetectAndProviders(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	code, _, stderr := run(t, "", "convert", "../../testdata/github/node-app.yml", "--to", "jenkins")
+	code, _, stderr := run(t, "", "../../testdata/github/node-app.yml", "--to", "jenkins")
 	if code != 2 || !strings.Contains(stderr, `unknown provider "jenkins"`) {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
-	code, _, stderr = run(t, "", "convert", "missing.yml", "--to", "github")
+	code, _, stderr = run(t, "", "missing.yml", "--to", "github")
 	if code != 2 || !strings.Contains(stderr, "no such file") {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+}
+
+func TestConvertAliasAndDefaults(t *testing.T) {
+	// The hidden convert subcommand behaves like the root command.
+	code, out, _ := run(t, "", "convert", "../../testdata/github/node-app.yml", "--to", "azure", "-q", "--no-header")
+	if code != 0 || !strings.Contains(out, "trigger:") {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	// validate remains an alias of check.
+	code, _, _ = run(t, "", "validate", "../../testdata/validate-valid-github.yml")
+	if code != 0 {
+		t.Fatalf("validate alias: code=%d", code)
+	}
+	code, _, stderr := run(t, "", "../../testdata/github/node-app.yml")
+	if code != 2 || !strings.Contains(stderr, "missing --to") {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	code, out, _ = run(t, "")
+	if code != 0 || !strings.Contains(out, "cishift <file|-> --to <provider>") {
+		t.Fatalf("no args should print help: code=%d out=%s", code, out)
 	}
 }

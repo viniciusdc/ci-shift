@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 // shellVars are the default environment variables GitHub exports to steps.

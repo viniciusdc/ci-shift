@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 // defaultImage is Bitbucket's own default build image, set explicitly when
@@ -751,7 +751,7 @@ func (e *emitter) action(st *ir.Step, tx func(string) string, where string) any 
 	}
 	if st.UsesFrom != "bitbucket" {
 		e.d.Warnf(where, "%s step %q has no Bitbucket equivalent; a failing placeholder command was emitted", st.UsesFrom, st.Uses)
-		return fmt.Sprintf("echo \"cistela: port %s step '%s' manually\" && exit 1", st.UsesFrom, st.Uses)
+		return fmt.Sprintf("echo \"ci-shift: port %s step '%s' manually\" && exit 1", st.UsesFrom, st.Uses)
 	}
 	pm := yamlx.NewMap().Set("pipe", st.Uses)
 	vars := yamlx.NewMap()

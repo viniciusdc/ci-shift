@@ -13,8 +13,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 // Provider is the Bitbucket Pipelines provider.

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 var (

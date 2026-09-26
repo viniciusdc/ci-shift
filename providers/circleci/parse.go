@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 // builtinSteps are CircleCI's native step types; anything else is a

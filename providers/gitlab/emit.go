@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 // Emit implements ir.Provider.
@@ -306,7 +306,7 @@ func emitJob(p *ir.Pipeline, j *ir.Job, names map[string]string, stage string, d
 			uploads = append(uploads, st.Artifact)
 		case ir.StepAction:
 			d.Warnf(where, "%s step %q has no GitLab equivalent; a failing placeholder command was emitted", st.UsesFrom, st.Uses)
-			script = append(script, fmt.Sprintf("echo \"cistela: port %s step '%s' manually\" && exit 1", st.UsesFrom, st.Uses))
+			script = append(script, fmt.Sprintf("echo \"ci-shift: port %s step '%s' manually\" && exit 1", st.UsesFrom, st.Uses))
 		case ir.StepTool:
 			// Already folded into the image or reported.
 		default:

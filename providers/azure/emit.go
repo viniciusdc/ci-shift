@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/viniciusdc/cistela/internal/yamlx"
-	"github.com/viniciusdc/cistela/ir"
+	"github.com/viniciusdc/ci-shift/internal/yamlx"
+	"github.com/viniciusdc/ci-shift/ir"
 )
 
 var (
@@ -631,7 +631,7 @@ func (e *emitter) step(j *ir.Job, st *ir.Step, secretEnv []ir.KV, path string) [
 		}
 		d.Warnf(path, "%s step %q has no Azure Pipelines equivalent; a failing placeholder step was emitted", st.UsesFrom, st.Uses)
 		m := yamlx.NewMap().
-			Set("script", fmt.Sprintf("echo \"##vso[task.logissue type=error]cistela: port %s step '%s' manually\" && exit 1", st.UsesFrom, st.Uses)).
+			Set("script", fmt.Sprintf("echo \"##vso[task.logissue type=error]ci-shift: port %s step '%s' manually\" && exit 1", st.UsesFrom, st.Uses)).
 			SetIf("displayName", name)
 		e.tail(m, st, cond, false, nil)
 		return []any{m}

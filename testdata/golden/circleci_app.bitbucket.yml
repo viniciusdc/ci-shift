@@ -1,4 +1,4 @@
-# Converted by cistela from circleci/app (CircleCI) to Bitbucket Pipelines.
+# Converted by ci-shift from circleci/app (CircleCI) to Bitbucket Pipelines.
 # Review before use; 4 item(s) need attention:
 #   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
 #   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
@@ -67,7 +67,7 @@ pipelines:
           name: deploy
           trigger: manual
           script:
-            - 'echo "cistela: port circleci step ''node/install-packages'' manually" && exit 1'
+            - 'echo "ci-shift: port circleci step ''node/install-packages'' manually" && exit 1'
             - ./deploy.sh staging ${BITBUCKET_BRANCH}
   custom:
     scheduled:
@@ -123,5 +123,5 @@ pipelines:
           name: deploy
           trigger: manual
           script:
-            - 'echo "cistela: port circleci step ''node/install-packages'' manually" && exit 1'
+            - 'echo "ci-shift: port circleci step ''node/install-packages'' manually" && exit 1'
             - ./deploy.sh staging ${BITBUCKET_BRANCH}

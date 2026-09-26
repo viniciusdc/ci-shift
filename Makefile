@@ -1,14 +1,14 @@
-BINARY_NAME = cistela
+BINARY_NAME = cishift
 INSTALL_DIR = $(HOME)/.local/bin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS = -s -w -X github.com/viniciusdc/cistela/internal/cli.Version=$(VERSION)
+LDFLAGS = -s -w -X github.com/viniciusdc/ci-shift/internal/cli.Version=$(VERSION)
 
 .PHONY: all build clean fmt lint test golden install uninstall install-tools schemas ci
 
 all: build
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) .
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) ./cmd/cishift
 
 clean:
 	rm -f $(BINARY_NAME)

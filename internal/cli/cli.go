@@ -1,4 +1,4 @@
-// Package cli implements the cistela command line.
+// Package cli implements the cishift command line.
 package cli
 
 import (
@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/viniciusdc/cistela/convert"
-	"github.com/viniciusdc/cistela/ir"
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/convert"
+	"github.com/viniciusdc/ci-shift/ir"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 // Version is set at build time with -ldflags "-X .../internal/cli.Version=...".
@@ -49,19 +49,46 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func newRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	var opts convertOpts
 	root := &cobra.Command{
-		Use:   "cistela",
-		Short: "Translate CI/CD pipelines between providers",
-		Long: `cistela translates CI/CD configurations between GitHub Actions, GitLab CI/CD,
+		Use:   "cishift <file|-> --to <provider>",
+		Short: "Shift CI/CD pipelines between providers",
+		Long: `ci-shift translates CI/CD configurations between GitHub Actions, GitLab CI/CD,
 CircleCI, Azure Pipelines and Bitbucket Pipelines through a shared pipeline
-model, and validates them against each provider's JSON schema.`,
+model, and checks them against each provider's JSON schema.`,
+		Example: `  cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
+  cishift .circleci/config.yml --to azure --check --strict
+  cat bitbucket-pipelines.yml | cishift - --from bitbucket --to gitlab
+  cishift check .github/workflows/*.yml`,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       Version,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return runConvert(args[0], opts, stdin, stdout, stderr)
+		},
 	}
+	opts.bind(root)
+
+	// "convert" stays available for scripts that prefer an explicit verb.
+	var aliasOpts convertOpts
+	convertCmd := &cobra.Command{
+		Use:    "convert <file|-> --to <provider>",
+		Short:  "Convert a pipeline (same as running cishift with a file)",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runConvert(args[0], aliasOpts, stdin, stdout, stderr)
+		},
+	}
+	aliasOpts.bind(convertCmd)
+
 	root.AddCommand(
-		newConvertCmd(stdin, stdout, stderr),
-		newValidateCmd(stdin, stdout, stderr),
+		convertCmd,
+		newCheckCmd(stdin, stdout),
 		newDetectCmd(stdin, stdout),
 		newProvidersCmd(stdout),
 	)
@@ -82,93 +109,91 @@ func resolveProvider(name, path string, data []byte) (ir.Provider, error) {
 	return convert.Detect(path, data)
 }
 
-func newConvertCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	var from, to, output string
-	var noHeader, strict, check, quiet bool
-	cmd := &cobra.Command{
-		Use:   "convert <file|->",
-		Short: "Convert a pipeline to another provider",
-		Example: `  cistela convert .gitlab-ci.yml --to github -o .github/workflows/ci.yml
-  cistela convert .circleci/config.yml --to azure
-  cat bitbucket-pipelines.yml | cistela convert - --from bitbucket --to gitlab`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := readInput(args[0], stdin)
-			if err != nil {
-				return err
-			}
-			src, err := resolveProvider(from, args[0], data)
-			if err != nil {
-				return err
-			}
-			dst, err := convert.Get(to)
-			if err != nil {
-				return err
-			}
-			res, err := convert.Convert(data, src, dst, convert.Options{
-				Header:     !noHeader,
-				SourceName: displayName(args[0]),
-			})
-			if err != nil {
-				return err
-			}
-			if !quiet {
-				for _, d := range res.Diagnostics {
-					fmt.Fprintln(stderr, d)
-				}
-			}
-			if output == "" || output == "-" {
-				if _, err := stdout.Write(res.Output); err != nil {
-					return err
-				}
-			} else {
-				if dir := filepath.Dir(output); dir != "." {
-					if err := os.MkdirAll(dir, 0o755); err != nil {
-						return err
-					}
-				}
-				if err := os.WriteFile(output, res.Output, 0o644); err != nil {
-					return err
-				}
-				if !quiet {
-					fmt.Fprintf(stderr, "wrote %s (%s -> %s)\n", output, src.Title(), dst.Title())
-				}
-			}
-			failed := false
-			if check {
-				issues, err := schema.Validate(dst.Name(), res.Output, schema.Options{})
-				if err != nil {
-					return err
-				}
-				for _, i := range issues {
-					fmt.Fprintf(stderr, "schema: %s\n", i)
-				}
-				failed = len(issues) > 0
-			}
-			if strict {
-				for _, d := range res.Diagnostics {
-					if d.Severity == ir.SeverityWarning {
-						failed = true
-						break
-					}
-				}
-			}
-			if failed {
-				return ExitError{Code: 1}
-			}
-			return nil
-		},
-	}
+// convertOpts are the flags of a conversion.
+type convertOpts struct {
+	from, to, output               string
+	noHeader, strict, check, quiet bool
+}
+
+func (o *convertOpts) bind(cmd *cobra.Command) {
 	f := cmd.Flags()
-	f.StringVarP(&from, "from", "f", "", "source provider (detected from the file when omitted)")
-	f.StringVarP(&to, "to", "t", "", "target provider: "+strings.Join(convert.Names(), ", "))
-	f.StringVarP(&output, "output", "o", "", "output file (default stdout)")
-	f.BoolVar(&noHeader, "no-header", false, "omit the review comment header")
-	f.BoolVar(&strict, "strict", false, "exit 1 when the conversion produced warnings")
-	f.BoolVar(&check, "check", false, "validate the output against the target provider's schema")
-	f.BoolVarP(&quiet, "quiet", "q", false, "do not print diagnostics")
-	_ = cmd.MarkFlagRequired("to")
-	return cmd
+	f.StringVarP(&o.from, "from", "f", "", "source provider (detected from the file when omitted)")
+	f.StringVarP(&o.to, "to", "t", "", "target provider: "+strings.Join(convert.Names(), ", "))
+	f.StringVarP(&o.output, "output", "o", "", "output file (default stdout)")
+	f.BoolVar(&o.noHeader, "no-header", false, "omit the review comment header")
+	f.BoolVar(&o.strict, "strict", false, "exit 1 when the conversion produced warnings")
+	f.BoolVar(&o.check, "check", false, "check the output against the target provider's schema")
+	f.BoolVarP(&o.quiet, "quiet", "q", false, "do not print diagnostics")
+}
+
+func runConvert(path string, o convertOpts, stdin io.Reader, stdout, stderr io.Writer) error {
+	if o.to == "" {
+		return fmt.Errorf("missing --to <provider> (one of %s)", strings.Join(convert.Names(), ", "))
+	}
+	data, err := readInput(path, stdin)
+	if err != nil {
+		return err
+	}
+	src, err := resolveProvider(o.from, path, data)
+	if err != nil {
+		return err
+	}
+	dst, err := convert.Get(o.to)
+	if err != nil {
+		return err
+	}
+	res, err := convert.Convert(data, src, dst, convert.Options{
+		Header:     !o.noHeader,
+		SourceName: displayName(path),
+	})
+	if err != nil {
+		return err
+	}
+	if !o.quiet {
+		for _, d := range res.Diagnostics {
+			fmt.Fprintln(stderr, d)
+		}
+	}
+	if o.output == "" || o.output == "-" {
+		if _, err := stdout.Write(res.Output); err != nil {
+			return err
+		}
+	} else {
+		if dir := filepath.Dir(o.output); dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
+		}
+		if err := os.WriteFile(o.output, res.Output, 0o644); err != nil {
+			return err
+		}
+		if !o.quiet {
+			fmt.Fprintf(stderr, "wrote %s (%s -> %s)\n", o.output, src.Title(), dst.Title())
+		}
+	}
+	failed := false
+	if o.check {
+		issues, err := schema.Validate(dst.Name(), res.Output, schema.Options{})
+		if err != nil {
+			return err
+		}
+		for _, i := range issues {
+			fmt.Fprintf(stderr, "schema: %s\n", i)
+		}
+		failed = len(issues) > 0
+	}
+	if o.strict {
+		for _, d := range res.Diagnostics {
+			if d.Severity == ir.SeverityWarning {
+				failed = true
+				break
+			}
+		}
+	}
+	if failed {
+		return ExitError{Code: 1}
+	}
+	return nil
 }
 
 func displayName(path string) string {
@@ -178,13 +203,14 @@ func displayName(path string) string {
 	return filepath.ToSlash(path)
 }
 
-func newValidateCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newCheckCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var provider string
 	var latest bool
 	cmd := &cobra.Command{
-		Use:   "validate <file|->...",
-		Short: "Validate pipeline files against their provider's JSON schema",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     "check <file|->...",
+		Aliases: []string{"validate"},
+		Short:   "Check pipeline files against their provider's JSON schema",
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			failed := false
 			for _, path := range args {
@@ -218,7 +244,6 @@ func newValidateCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&provider, "provider", "p", "", "provider (detected from the file when omitted)")
 	cmd.Flags().BoolVar(&latest, "latest", false, "download the latest schema instead of the embedded snapshot")
-	_ = stderr
 	return cmd
 }
 

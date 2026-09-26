@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/viniciusdc/cistela/ir"
-	"github.com/viniciusdc/cistela/providers/github"
-	"github.com/viniciusdc/cistela/providers/gitlab"
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/ir"
+	"github.com/viniciusdc/ci-shift/providers/github"
+	"github.com/viniciusdc/ci-shift/providers/gitlab"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 func readFixture(t *testing.T, name string) []byte {

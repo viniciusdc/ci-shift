@@ -1,4 +1,4 @@
-# Converted by cistela from circleci/app (CircleCI) to Azure Pipelines.
+# Converted by ci-shift from circleci/app (CircleCI) to Azure Pipelines.
 # Review before use; 6 item(s) need attention:
 #   - jobs.deploy.parallelism: "parallelism" is not portable and was dropped
 #   - jobs.deploy.steps[2]: orb command "node/install-packages" (circleci/node@5.1.0) is not portable and was kept as a CircleCI step
@@ -91,7 +91,7 @@ jobs:
           buildType: current
           artifactName: bundle
           targetPath: $(Build.SourcesDirectory)/dist
-      - script: 'echo "##vso[task.logissue type=error]cistela: port circleci step ''node/install-packages'' manually" && exit 1'
+      - script: 'echo "##vso[task.logissue type=error]ci-shift: port circleci step ''node/install-packages'' manually" && exit 1'
       - script: ./deploy.sh staging $(Build.SourceBranchName)
   - job: nightly_audit
     condition: and(succeeded(), eq(variables['Build.Reason'], 'Schedule'))

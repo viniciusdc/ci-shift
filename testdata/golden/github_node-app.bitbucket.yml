@@ -1,4 +1,4 @@
-# Converted by cistela from github/node-app (GitHub Actions) to Bitbucket Pipelines.
+# Converted by ci-shift from github/node-app (GitHub Actions) to Bitbucket Pipelines.
 # Review before use; 3 item(s) need attention:
 #   - pipelines.custom.scheduled: create a schedule for the custom pipeline "scheduled" in Repository settings > Pipelines > Schedules with cron 0 3 * * 1 (UTC)
 #   - test.steps[3]: Bitbucket uploads artifacts only when the step succeeds; when: always was dropped
@@ -97,7 +97,7 @@ pipelines:
             - export NODE_ENV=test
             - export REGISTRY=ghcr.io
             - ./scripts/deploy.sh dist "${DEPLOY_TOKEN}"
-            - 'echo "cistela: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+            - 'echo "ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
     release/**:
       - step:
           name: lint

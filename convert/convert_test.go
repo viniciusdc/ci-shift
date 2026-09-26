@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/viniciusdc/cistela/ir"
-	"github.com/viniciusdc/cistela/schema"
+	"github.com/viniciusdc/ci-shift/ir"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")

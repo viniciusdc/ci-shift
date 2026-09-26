@@ -1,4 +1,4 @@
-# Converted by cistela from github/node-app (GitHub Actions) to GitLab CI/CD.
+# Converted by ci-shift from github/node-app (GitHub Actions) to GitLab CI/CD.
 # Review before use; 2 item(s) need attention:
 #   - workflow: create a pipeline schedule in GitLab (Build > Pipeline schedules) for cron 0 3 * * 1
 #   - deploy.steps[2]: github step "slackapi/slack-github-action@v1" has no GitLab equivalent; a failing placeholder command was emitted
@@ -85,7 +85,7 @@ deploy:
     GIT_STRATEGY: none
   script:
     - ./scripts/deploy.sh dist "${DEPLOY_TOKEN}"
-    - 'echo "cistela: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+    - 'echo "ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   environment: production

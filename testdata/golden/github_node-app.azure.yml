@@ -1,4 +1,4 @@
-# Converted by cistela from github/node-app (GitHub Actions) to Azure Pipelines.
+# Converted by ci-shift from github/node-app (GitHub Actions) to Azure Pipelines.
 # Review before use; 3 item(s) need attention:
 #   - schedules[0]: Azure schedules need a branch filter; assuming the default branch is "main"
 #   - jobs.lint.steps[2]: Cache@2 does not expand ~ in "~/.npm"; use an absolute path such as $(Pipeline.Workspace)/...
@@ -113,5 +113,5 @@ jobs:
               displayName: Deploy
               env:
                 DEPLOY_TOKEN: $(DEPLOY_TOKEN)
-            - script: 'echo "##vso[task.logissue type=error]cistela: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
+            - script: 'echo "##vso[task.logissue type=error]ci-shift: port github step ''slackapi/slack-github-action@v1'' manually" && exit 1'
               displayName: Notify

@@ -1,4 +1,4 @@
-# Converted by cistela from bitbucket/full (Bitbucket Pipelines) to CircleCI.
+# Converted by ci-shift from bitbucket/full (Bitbucket Pipelines) to CircleCI.
 # Review before use; 21 item(s) need attention:
 #   - pipelines.custom: custom pipelines run manually or from schedules configured in Repository settings > Pipelines > Schedules; schedules are not stored in the file and were not converted
 #   - pipelines.branches.main[1].stage.steps[0].step.script[1]: Bitbucket pipe "atlassian/slack-notify:2.1.0" only exists on Bitbucket Pipelines
@@ -133,7 +133,7 @@ jobs:
       - attach_workspace:
           at: .
       - run: npm publish
-      - run: 'echo "cistela: port bitbucket step ''atlassian/slack-notify:2.1.0'' manually" && exit 1'
+      - run: 'echo "ci-shift: port bitbucket step ''atlassian/slack-notify:2.1.0'' manually" && exit 1'
   # Tag build
   tag-v-tag-build:
     docker:

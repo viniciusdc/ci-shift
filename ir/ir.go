@@ -1,4 +1,4 @@
-// Package ir defines cistela's provider-neutral pipeline model.
+// Package ir defines ci-shift's provider-neutral pipeline model.
 //
 // Every provider parses its native configuration into a *Pipeline and emits
 // a *Pipeline back into its native configuration, so N providers need N
@@ -163,7 +163,7 @@ type Condition struct {
 	Branches []string
 	Event    string
 	Manual   bool
-	// Raw keeps a provider-specific expression cistela could not translate.
+	// Raw keeps a provider-specific expression ci-shift could not translate.
 	Raw     string
 	RawFrom string
 }

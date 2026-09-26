@@ -1,4 +1,4 @@
-# Converted by cistela from azure/multistage (Azure Pipelines) to GitLab CI/CD.
+# Converted by ci-shift from azure/multistage (Azure Pipelines) to GitLab CI/CD.
 # Review before use; 11 item(s) need attention:
 #   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Agent.OS) has no portable equivalent and was kept verbatim
 #   - stages.Build.jobs.lint.steps[2].inputs: predefined variable $(Pipeline.Workspace) has no portable equivalent and was kept verbatim
@@ -66,7 +66,7 @@ test:
   variables:
     STAGE_VAR: build
   script:
-    - 'echo "cistela: port azure step ''PublishTestResults@2'' manually" && exit 1'
+    - 'echo "ci-shift: port azure step ''PublishTestResults@2'' manually" && exit 1'
   after_script:
     - |-
       (

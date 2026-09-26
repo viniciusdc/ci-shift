@@ -7,12 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/viniciusdc/cistela/ir"
-	"github.com/viniciusdc/cistela/providers/azure"
-	"github.com/viniciusdc/cistela/providers/bitbucket"
-	"github.com/viniciusdc/cistela/providers/circleci"
-	"github.com/viniciusdc/cistela/providers/github"
-	"github.com/viniciusdc/cistela/providers/gitlab"
+	"github.com/viniciusdc/ci-shift/ir"
+	"github.com/viniciusdc/ci-shift/providers/azure"
+	"github.com/viniciusdc/ci-shift/providers/bitbucket"
+	"github.com/viniciusdc/ci-shift/providers/circleci"
+	"github.com/viniciusdc/ci-shift/providers/github"
+	"github.com/viniciusdc/ci-shift/providers/gitlab"
 )
 
 var providers = []ir.Provider{
@@ -132,7 +132,7 @@ func header(r *Result, source string) string {
 	if source != "" {
 		src = fmt.Sprintf("%s (%s)", source, r.From.Title())
 	}
-	fmt.Fprintf(&b, "# Converted by cistela from %s to %s.\n", src, r.To.Title())
+	fmt.Fprintf(&b, "# Converted by ci-shift from %s to %s.\n", src, r.To.Title())
 	warnings := 0
 	for _, d := range r.Diagnostics {
 		if d.Severity == ir.SeverityWarning {
