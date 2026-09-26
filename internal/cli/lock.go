@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -32,11 +33,18 @@ func openLock(path string) (*lockfile.File, error) {
 // displayPath shortens absolute paths under the working directory.
 func displayPath(path string) string {
 	if wd, err := os.Getwd(); err == nil {
-		if rel, err := filepath.Rel(wd, path); err == nil && !filepath.IsAbs(rel) && rel != "" && rel[0] != '.' {
+		if rel, err := filepath.Rel(wd, path); err == nil && !filepath.IsAbs(rel) && rel != "." && !outsideDir(rel) {
 			return filepath.ToSlash(rel)
 		}
 	}
 	return filepath.ToSlash(path)
+}
+
+// outsideDir reports whether a relative path climbs out of its base
+// directory. Names that merely start with a dot, like .cishift.lock, stay
+// inside it.
+func outsideDir(rel string) bool {
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 var errHandEdited = errors.New("edited by hand since cishift generated it")

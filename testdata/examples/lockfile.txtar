@@ -8,7 +8,7 @@ mkdir .git
 # Writing with -o records the output in .cishift.lock.
 exec cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
 stderr '^wrote \.github/workflows/ci\.yml \(GitLab CI/CD -> GitHub Actions\)$'
-stderr '^recorded in .*\.cishift\.lock$'
+stderr '^recorded in \.cishift\.lock$'
 exists .cishift.lock
 grep '^    source: \.gitlab-ci\.yml$' .cishift.lock
 grep '^    to: github$' .cishift.lock
@@ -37,7 +37,7 @@ test:
 -- display.sh --
 cishift .gitlab-ci.yml --to github -o .github/workflows/ci.yml
 # wrote .github/workflows/ci.yml (GitLab CI/CD -> GitHub Actions)
-# recorded in /home/me/app/.cishift.lock
+# recorded in .cishift.lock
 
 echo "# tweak" >> .github/workflows/ci.yml
 cishift verify
