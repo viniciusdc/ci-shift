@@ -38,8 +38,10 @@ reports that provider as **skipped**, and the job stays green.
 | `on-test-branch` | it runs, because its condition matches the `e2e/` branch prefix | branch conditions |
 | `never-runs` | it is skipped or not scheduled (it runs `exit 1`) | branch conditions |
 
-Every job runs in `debian:bookworm-slim`, which meets Azure's container-job
-requirements (bash, glibc, no `ENTRYPOINT`) and runs everywhere else. The
+Every job runs in `buildpack-deps:bookworm-scm`, Debian with git, ssh and
+CA certificates. CircleCI's `checkout` needs those in the job image, and the
+image meets Azure's container-job requirements (bash, glibc, no
+`ENTRYPOINT`). The
 runner matches jobs by name, ignoring case and punctuation, so `matrix-legs
 (red)`, `matrix_legs red` and `matrix-legs: [red]` all count as legs of
 `matrix-legs`.
@@ -113,86 +115,115 @@ request.
 
 ### GitLab
 
-1. Create a **dedicated** GitLab.com account and a private project in it,
-   e.g. `ci-shift-e2e`, initialized with a README. A dedicated account keeps
-   the personal access token's reach small.
-2. Make sure GitLab-hosted runners can run: **Settings › CI/CD › Runners ›
-   Instance runners** must be enabled. The first pipeline may ask the account
-   to verify its identity (email, phone and/or credit card, depending on a
-   risk score). Complete it once in the UI.
-3. Create a token with the **`api`** and **`write_repository`** scopes. The
-   account needs the **Maintainer** role, because writing CI/CD variables
-   requires it.
-   - Free: a **personal access token** (**Preferences › Access tokens**).
-     Project access tokens need Premium or Ultimate.
-   - Premium/Ultimate: a **project access token** (**Settings › Access
-     tokens**) with the Maintainer role.
-4. Add to the `e2e` environment:
+About 15 minutes.
+
+1. Create a GitLab.com account. A dedicated account keeps the token's reach
+   small. Sign-up always verifies the email; depending on a risk score GitLab
+   may also ask for a phone number or a credit card (not charged).
+2. **Create new (+) › New project/repository › Create blank project**: name
+   it `ci-shift-e2e`, make it private, keep **Initialize repository with a
+   README**, and put it in your personal namespace.
+3. Instance runners are on by default on GitLab.com; **Settings › CI/CD ›
+   Runners › Turn on instance runners for this project** if not. Run one
+   pipeline by hand (**Build › Pipelines › New pipeline**) before the first
+   e2e run: if it fails with *Identity verification is required in order to
+   run CI jobs*, finish the verification from the banner. An unattended run
+   would otherwise fail the same way.
+4. Avatar › **Edit profile › Access › Personal access tokens › Generate
+   token › Legacy token**, scope **`api`**. It covers the git push too, so
+   `write_repository` is not needed; `read_api` is not enough, because it
+   cannot write CI/CD variables. Expiry is at most 365 days, and GitLab
+   emails you 60, 30 and 7 days before. As the project's creator you are its
+   Owner, which covers the Maintainer role that variables require.
+   Project access tokens would be narrower but need Premium on GitLab.com.
+5. Add to the `e2e` environment:
 
 | Kind | Name | Value |
 |---|---|---|
 | secret | `E2E_GITLAB_TOKEN` | the token |
-| variable | `E2E_GITLAB_PROJECT` | `<namespace>/ci-shift-e2e` |
+| variable | `E2E_GITLAB_PROJECT` | `<username>/ci-shift-e2e` |
 | variable | `E2E_GITLAB_URL` | optional; a self-managed instance, default `https://gitlab.com` |
 
 The runner creates or updates the project variable `E2E_SECRET`: masked,
-and not protected, so that the `e2e/*` branches can read it.
+and not protected, because protected variables are hidden from the
+unprotected `e2e/*` branches.
 
 ### Bitbucket
 
-1. Create a workspace (or use yours) and a private repository, e.g.
-   `ci-shift-e2e`, with an initial commit.
-2. Enable Pipelines: **Repository settings › Pipelines › Settings › Enable
-   Pipelines**.
-3. Create a **repository access token** (**Repository settings › Security ›
-   Access tokens**; all plans have them). Give it these scopes:
-   **Repositories: Write**, **Pipelines: Read** and **Pipelines: Edit
-   variables** (`repository:write`, `pipeline`, `pipeline:variable`). With a
-   repository access token, git uses the user name `x-token-auth` and the API
-   uses Bearer auth.
-   - Alternatively, use an Atlassian **API token** with scopes
-     `write:repository:bitbucket`, `read:pipeline:bitbucket` and
-     `admin:pipeline:bitbucket`, and also set `E2E_BITBUCKET_EMAIL`. App
-     passwords no longer work: Atlassian switched them off on 2026-07-28.
-4. Add to the `e2e` environment:
+About 15 minutes.
+
+1. Sign up at [bitbucket.org](https://bitbucket.org) with an Atlassian
+   account and name a workspace when asked. Consider a workspace just for
+   these tests: the Free plan's 50 build minutes a month are shared by every
+   repository in the workspace.
+2. Create a private repository `ci-shift-e2e` with a README, so it has a
+   main branch.
+3. Turn on Pipelines: **Repository settings › Pipelines › Settings › Enable
+   Pipelines**, or run the wizard once from **Pipelines › Create your first
+   pipeline**.
+4. Repository **… › Settings › Security › Access tokens › Create access
+   token** (every plan has them). Tick **Repositories: Read** and **Write**,
+   **Pipelines: Read** and **Pipelines: Edit variables** (`repository`,
+   `repository:write`, `pipeline`, `pipeline:variable`). The token is shown
+   once. git authenticates as `x-token-auth`, the REST API with a Bearer
+   header; the runner handles both.
+   - Alternatively, an Atlassian API token (**Account settings › Security ›
+     Create API token with scopes**, app **Bitbucket**) with
+     `read:repository:bitbucket`, `write:repository:bitbucket`,
+     `read:pipeline:bitbucket` and `admin:pipeline:bitbucket`. Set
+     `E2E_BITBUCKET_EMAIL` with it: the runner then authenticates git as
+     `x-bitbucket-api-token-auth`. App passwords stopped working on
+     2026-07-28.
+5. Add to the `e2e` environment:
 
 | Kind | Name | Value |
 |---|---|---|
 | secret | `E2E_BITBUCKET_TOKEN` | the token |
-| variable | `E2E_BITBUCKET_WORKSPACE` | workspace slug |
+| variable | `E2E_BITBUCKET_WORKSPACE` | workspace ID |
 | variable | `E2E_BITBUCKET_REPO` | repository slug |
 | variable | `E2E_BITBUCKET_EMAIL` | only with an API token: your Atlassian account email |
 
 The runner creates or updates the secured repository variable `E2E_SECRET`.
+When the workspace runs out of build minutes, Bitbucket pauses the pipeline
+instead of failing it, and Free plans cannot buy more; the runner reports a
+paused pipeline as failed.
 
 ### Azure DevOps
 
-1. Create an organization and a private project at
-   [dev.azure.com](https://dev.azure.com), and a repository in **Repos**
-   (initialize it with a README).
-2. Get hosted parallelism. Private projects get no Microsoft-hosted
-   parallel job until the free grant is approved: 1 job, 1,800 minutes a
-   month. The current docs grant it once the organization is linked to an
-   Azure subscription (**Organization settings › Billing**). Older
-   organizations requested it through https://aka.ms/azpipelines-parallelism-request.
-   See [Configure and pay for parallel jobs](https://learn.microsoft.com/azure/devops/pipelines/licensing/concurrent-jobs).
-3. Create the pipeline once. The runner looks for a pipeline named
-   `ci-shift-e2e` (or `E2E_AZURE_PIPELINE`) and tries to create it when it is
-   missing, but Azure reads `azure-pipelines.yml` from the default branch
-   when a pipeline is created. So commit that file to `main` first:
+About 30 minutes, plus waiting for the free build capacity.
+
+1. At [dev.azure.com](https://dev.azure.com), create an organization and a
+   **private** project (new public projects are no longer allowed), then in
+   **Repos** initialize the repository with a README on `main`.
+2. Get the free Microsoft-hosted parallel job (1 job, 1,800 minutes a month;
+   private projects have none until then). **Organization settings › Billing
+   › Set up billing** and link an Azure subscription in the same Microsoft
+   Entra directory. It must be a paid (pay-as-you-go) subscription: the Azure
+   free trial is not accepted. The free job itself costs nothing. Check
+   **Organization settings › Pipelines › Parallel jobs**: it should show 1
+   Microsoft-hosted job. If it still shows 0, submit
+   https://aka.ms/azpipelines-parallelism-request, which Microsoft answers in
+   about 4–5 business days.
+3. Commit the converted pipeline to `main`, since Azure reads it when the
+   pipeline is created:
 
    ```bash
    go run ./e2e -dry-run -providers azure -out /tmp/e2e
    # commit /tmp/e2e/azure/azure-pipelines.yml to the repository's main branch
    ```
 
-   Then either let the first run create the pipeline, or create it yourself
-   under **Pipelines › New pipeline › Azure Repos Git › Existing YAML file**
-   (save it without running, and name it `ci-shift-e2e`).
-4. Create an **organization-scoped** personal access token (**User settings
-   › Personal access tokens**). Global PATs stop working on 2026-12-01. Give
-   it the scopes **Code: Read & write** and **Build: Read & execute**.
-5. Add to the `e2e` environment:
+   Then let the first run create the pipeline, or create it yourself under
+   **Pipelines › New pipeline › Azure Repos Git › Existing Azure Pipelines
+   YAML file**, **Save** without running, and rename it `ci-shift-e2e`.
+4. **Organization settings › Pipelines › Settings**: leave **Disable implied
+   YAML CI trigger** off (the default), or pushes to `e2e/*` start nothing.
+   The runner queues a build itself after two minutes, but the trigger is
+   faster.
+5. **User settings › Personal access tokens › New Token**, scoped to this
+   organization (global PATs stop working on 2026-12-01), with **Code: Read &
+   write** and **Build: Read & execute**. Those cover the push, creating the
+   pipeline, its secret variable, queueing builds and reading their results.
+6. Add to the `e2e` environment:
 
 | Kind | Name | Value |
 |---|---|---|
@@ -204,40 +235,46 @@ The runner creates or updates the secured repository variable `E2E_SECRET`.
 
 The runner stores `E2E_SECRET` as a secret variable on the pipeline
 definition. The converted YAML maps it into the step's `env`, because Azure
-does not expose secrets on its own. The push to `e2e/*` triggers the run.
-If no build appears within two minutes (for example because implied YAML
-triggers are turned off), the runner queues one for the branch.
+does not expose secrets on its own. With a single free parallel job, runs
+queue behind any other build in the organization.
 
 ### CircleCI
 
-CircleCI only builds repositories hosted on GitHub or Bitbucket, so the
-target is a second, empty GitHub repository that CircleCI follows.
+About 20 minutes. CircleCI only builds repositories hosted on GitHub or
+Bitbucket, so the target is a second GitHub repository that CircleCI
+follows.
 
-1. Create a private GitHub repository, e.g. `viniciusdc/ci-shift-e2e-circleci`,
-   with an initial commit.
-2. Sign up at [circleci.com](https://circleci.com) with GitHub and **create
-   a project** for that repository. New projects use the GitHub App
-   integration, whose default trigger runs on every push. If the project
-   slug (**Project settings › Overview**) is `circleci/<org-id>/<project-id>`
-   rather than `gh/<owner>/<repo>`, set `E2E_CIRCLECI_SLUG` to it.
-3. Create a CircleCI **personal API token** (**User settings › Personal API
-   tokens**). CircleCI tokens have no scopes, so this is another reason to
-   use a dedicated account.
-4. Create a GitHub **fine-grained personal access token** that can access
-   only the throwaway repository, with **Contents: Read and write** (GitHub
-   adds Metadata: Read). This token pushes the test branches.
-5. Add to the `e2e` environment:
+1. Create a private GitHub repository, e.g.
+   `viniciusdc/ci-shift-e2e-circleci`, with an initial commit.
+2. Sign up at [circleci.com](https://circleci.com/signup/) with GitHub, then
+   **Create Project › Set up a pipeline › Choose a repo › GitHub Cloud**, and
+   install the CircleCI GitHub App on that repository only.
+3. **Project Settings › Project Setup**: make sure the trigger is **All
+   pushes**. A default-branch or pull-request trigger never runs the `e2e/*`
+   branches.
+4. Copy the project slug from **Project Settings**. GitHub App projects look
+   like `circleci/<org-id>/<project-id>`, not `gh/<owner>/<repo>`, so the
+   runner does not guess it.
+5. **User settings › Personal API Tokens › Create New Token**. These tokens
+   have no scopes and expire within a year; project tokens do not work with
+   the API the runner uses.
+6. On GitHub, **Settings › Developer settings › Fine-grained tokens ›
+   Generate new token**: only the throwaway repository, **Contents: Read and
+   write** (GitHub adds Metadata: Read). This token pushes and deletes the
+   test branches.
+7. Add to the `e2e` environment:
 
 | Kind | Name | Value |
 |---|---|---|
 | secret | `E2E_CIRCLECI_TOKEN` | the CircleCI token |
 | secret | `E2E_CIRCLECI_GH_TOKEN` | the GitHub token |
 | variable | `E2E_CIRCLECI_REPO` | `<owner>/<repo>` on GitHub |
-| variable | `E2E_CIRCLECI_SLUG` | optional; the project slug, default `gh/<owner>/<repo>` |
+| variable | `E2E_CIRCLECI_SLUG` | the project slug from step 4 |
 
-The runner replaces the project environment variable `E2E_SECRET`. CircleCI
-does not start a pipeline for a branch created without a new commit. Every
-run pushes a new commit, so this does not come up.
+The runner deletes and recreates the project environment variable
+`E2E_SECRET` (CircleCI cannot update one in place). CircleCI starts no
+pipeline for a pushed branch without a new commit; every run pushes a new
+commit, so this does not come up.
 
 ## Cost
 
