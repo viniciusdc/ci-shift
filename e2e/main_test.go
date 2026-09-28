@@ -66,7 +66,7 @@ func TestDryRun(t *testing.T) {
 func TestMasksSecretsInActions(t *testing.T) {
 	var stdout, stderr strings.Builder
 	env := envOf(map[string]string{"GITHUB_ACTIONS": "true", "E2E_PROVIDERS": "circleci",
-		"E2E_CIRCLECI_REPO": "me/e2e", "E2E_CIRCLECI_GH_TOKEN": "ghtok", "E2E_CIRCLECI_TOKEN": "cctok"})
+		"E2E_CIRCLECI_REPO": "me/e2e", "E2E_CIRCLECI_SLUG": "gh/me/e2e", "E2E_CIRCLECI_GH_TOKEN": "ghtok", "E2E_CIRCLECI_TOKEN": "cctok"})
 	if code := run([]string{"-dry-run"}, env, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d\n%s", code, stderr.String())
 	}

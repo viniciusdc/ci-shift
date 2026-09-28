@@ -16,7 +16,7 @@ type CircleCI struct {
 	APIBase     string // https://circleci.com/api/v2
 	GitHubBase  string // https://github.com
 	Repo        string // owner/name on GitHub
-	Slug        string // CircleCI project slug, gh/<owner>/<name> by default
+	Slug        string // CircleCI project slug, from Project Settings
 	GitHubToken string
 	Token       string // CircleCI personal API token
 	Secret      string // value given to the E2E_SECRET project variable
@@ -33,11 +33,12 @@ func newCircleCI(env func(string) string) (*CircleCI, []string) {
 		GitHubToken: env("E2E_CIRCLECI_GH_TOKEN"),
 		Token:       env("E2E_CIRCLECI_TOKEN"),
 	}
-	if c.Slug == "" && c.Repo != "" {
-		c.Slug = "gh/" + c.Repo
-	}
+	// The slug is not derived from the repository: projects created through
+	// the GitHub App, the default today, get circleci/<org-id>/<project-id>
+	// rather than gh/<owner>/<name>.
 	return c, missing(map[string]string{
 		"E2E_CIRCLECI_REPO":     c.Repo,
+		"E2E_CIRCLECI_SLUG":     c.Slug,
 		"E2E_CIRCLECI_GH_TOKEN": c.GitHubToken,
 		"E2E_CIRCLECI_TOKEN":    c.Token,
 	})

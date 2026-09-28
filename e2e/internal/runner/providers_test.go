@@ -401,7 +401,7 @@ func TestCircleCI(t *testing.T) {
 	f.json("GET /workflow/w-2/job", map[string]any{"items": []map[string]any{{"name": "on-test-branch", "status": "canceled"}}})
 
 	c, miss := newCircleCI(func(k string) string {
-		return map[string]string{"E2E_CIRCLECI_REPO": "me/e2e", "E2E_CIRCLECI_GH_TOKEN": "ghp", "E2E_CIRCLECI_TOKEN": "cctok"}[k]
+		return map[string]string{"E2E_CIRCLECI_REPO": "me/e2e", "E2E_CIRCLECI_SLUG": "gh/me/e2e", "E2E_CIRCLECI_GH_TOKEN": "ghp", "E2E_CIRCLECI_TOKEN": "cctok"}[k]
 	})
 	if len(miss) != 0 {
 		t.Fatalf("missing %v", miss)

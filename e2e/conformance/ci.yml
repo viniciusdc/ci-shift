@@ -10,7 +10,7 @@ env:
 jobs:
   checkout-repo:
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     steps:
       - uses: actions/checkout@v4
       - name: Repository files are present
@@ -20,7 +20,7 @@ jobs:
 
   artifact-produce:
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     steps:
       - name: Write the artifact
         run: |
@@ -34,7 +34,7 @@ jobs:
   artifact-consume:
     needs: artifact-produce
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -47,7 +47,7 @@ jobs:
 
   matrix-legs:
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     strategy:
       matrix:
         leg: [red, blue]
@@ -59,7 +59,7 @@ jobs:
 
   env-vars:
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     env:
       JOB_VAR: job-level
     steps:
@@ -75,7 +75,7 @@ jobs:
 
   postgres-service:
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     services:
       postgres:
         image: postgres:16
@@ -100,7 +100,7 @@ jobs:
 
   cache-roundtrip:
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     steps:
       - uses: actions/cache@v4
         with:
@@ -115,13 +115,13 @@ jobs:
   on-test-branch:
     if: startsWith(github.ref, 'refs/heads/e2e/')
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     steps:
       - run: echo "runs on e2e branches"
 
   never-runs:
     if: github.ref == 'refs/heads/does-not-exist'
     runs-on: ubuntu-latest
-    container: debian:bookworm-slim
+    container: buildpack-deps:bookworm-scm
     steps:
       - run: exit 1
