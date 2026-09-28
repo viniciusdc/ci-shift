@@ -1,0 +1,127 @@
+name: ci-shift conformance
+
+on:
+  push:
+    branches: ['e2e/*']
+
+env:
+  PIPELINE_VAR: pipeline-level
+
+jobs:
+  checkout-repo:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repository files are present
+        run: |
+          test -f e2e/conformance/ci.yml
+          grep -q 'ci-shift conformance' e2e/conformance/ci.yml
+
+  artifact-produce:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - name: Write the artifact
+        run: |
+          mkdir -p handoff
+          echo "made-by-produce" > handoff/token.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: handoff
+          path: handoff
+
+  artifact-consume:
+    needs: artifact-produce
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: handoff
+          path: handoff
+      - name: The artifact arrived intact
+        run: |
+          test -f handoff/token.txt
+          test "$(cat handoff/token.txt)" = "made-by-produce"
+
+  matrix-legs:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    strategy:
+      matrix:
+        leg: [red, blue]
+    steps:
+      - name: The matrix value is set for this leg
+        run: |
+          echo "leg=${{ matrix.leg }}"
+          case "${{ matrix.leg }}" in red|blue) ;; *) exit 1 ;; esac
+
+  env-vars:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    env:
+      JOB_VAR: job-level
+    steps:
+      - name: Variables and the secret reach the script
+        env:
+          STEP_VAR: step-level
+          E2E_SECRET: ${{ secrets.E2E_SECRET }}
+        run: |
+          test "$PIPELINE_VAR" = "pipeline-level"
+          test "$JOB_VAR" = "job-level"
+          test "$STEP_VAR" = "step-level"
+          test -n "$E2E_SECRET"
+
+  postgres-service:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Postgres accepts connections
+        run: |
+          for i in $(seq 1 30); do
+            for host in postgres localhost 127.0.0.1; do
+              if bash -c "echo > /dev/tcp/$host/5432" 2>/dev/null; then
+                echo "postgres is up on $host:5432"
+                exit 0
+              fi
+            done
+            sleep 2
+          done
+          echo "postgres did not answer on 5432"
+          exit 1
+
+  cache-roundtrip:
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - uses: actions/cache@v4
+        with:
+          path: .e2e-cache
+          key: e2e-cache
+      - name: Fill the cache directory
+        run: |
+          if test -f .e2e-cache/marker; then echo "cache restored"; else echo "cache miss"; fi
+          mkdir -p .e2e-cache
+          echo cached > .e2e-cache/marker
+
+  on-test-branch:
+    if: startsWith(github.ref, 'refs/heads/e2e/')
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - run: echo "runs on e2e branches"
+
+  never-runs:
+    if: github.ref == 'refs/heads/does-not-exist'
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - run: exit 1
