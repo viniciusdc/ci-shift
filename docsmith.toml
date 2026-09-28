@@ -51,6 +51,7 @@ max_depth  = 3
 "cmd"              = "Executable entry points"
 "docs"             = "CLI reference, lockfile and translation guides"
 "docs/diagrams"    = "Diagram sources (TOML) for gendiagram"
+"e2e/internal"     = "Packages private to the live tests"
 "internal"         = "Packages private to this module"
 "internal/tools"   = "Maintenance commands, run through make"
 "providers"        = "One parser + emitter per CI provider"
