@@ -674,6 +674,9 @@ func (e *emitter) run(j *ir.Job, st *ir.Step, name, cond string, env *yamlx.Map,
 	body := st.Run
 	if kind == scriptPOSIX {
 		body = e.exportedRefs(j, body)
+		// Azure runs scripts without errexit; keep the IR's
+		// stop-at-first-error semantics (see errexit.go).
+		body = withErrexit(body, key == "bash")
 	}
 	m := yamlx.NewMap().Set(key, e.toAZ(body, kind, path)).SetIf("displayName", name)
 	m.SetIf("workingDirectory", e.toAZ(st.WorkingDir, scriptNone, path))

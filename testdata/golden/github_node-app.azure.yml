@@ -87,6 +87,7 @@ jobs:
         inputs:
           versionSpec: '20'
       - script: |-
+          set -e
           npm ci
           npm run build
           echo "Built $(Build.SourceVersion) on $(Build.SourceBranchName)"

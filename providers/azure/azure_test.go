@@ -298,7 +298,13 @@ func TestRoundTrip(t *testing.T) {
 		}
 		for i, s1 := range j1.Steps {
 			s2 := j2.Steps[i]
-			eq(t, j1.ID+" step run", s2.Run, s1.Run)
+			// Emitted scripts gain the set line that keeps them
+			// stopping at the first failing command.
+			want := s1.Run
+			if s1.Kind == ir.StepRun && posixScript(j1, s1) {
+				want = withErrexit(want, s1.Shell == "bash")
+			}
+			eq(t, j1.ID+" step run", s2.Run, want)
 			eq(t, j1.ID+" step env", s2.Env, s1.Env)
 			eq(t, j1.ID+" step if", s2.If, s1.If)
 			eq(t, j1.ID+" step cache", s2.Cache, s1.Cache)

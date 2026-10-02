@@ -542,6 +542,7 @@ func (ps *parser) parseJob(rj *rawJob, ctx *jobCtx) (*ir.Job, []string) {
 			sawDownload = true
 		}
 		if st != nil {
+			ps.noteErrexit(j, st, where)
 			j.Steps = append(j.Steps, st)
 		}
 	}
