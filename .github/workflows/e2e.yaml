@@ -71,9 +71,9 @@ jobs:
 
       # Azure with E2E_AZURE_POOL: this machine joins that self-hosted pool
       # as a temporary agent for the run, so jobs start at once instead of
-      # waiting for the free Microsoft-hosted agent. The token reaches
-      # config.sh only; the running agent publishes its environment as
-      # capabilities, so it is started without it.
+      # waiting for the free Microsoft-hosted agent. The running agent
+      # publishes its whole environment to Azure as capabilities, so it
+      # starts with a minimal one: the token reaches config.sh only.
       - name: Start an Azure Pipelines agent
         id: azure-agent
         if: matrix.provider == 'azure' && vars.E2E_AZURE_POOL != ''
@@ -89,7 +89,7 @@ jobs:
           cd "$RUNNER_TEMP/azure-agent"
           curl -fsSL "https://download.agent.dev.azure.com/agent/$AGENT_VERSION/vsts-agent-linux-x64-$AGENT_VERSION.tar.gz" | tar -xz
           ./config.sh --unattended --acceptTeeEula --replace
-          env -u VSTS_AGENT_INPUT_TOKEN nohup ./run.sh > agent.log 2>&1 &
+          env -i HOME="$HOME" USER="$USER" LANG=C.UTF-8 PATH="$PATH" nohup ./run.sh > agent.log 2>&1 &
 
       # Each job only receives its own provider's credentials. The runner
       # decides whether they are complete and skips the provider otherwise.
