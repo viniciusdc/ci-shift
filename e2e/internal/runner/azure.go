@@ -1,11 +1,15 @@
 package runner
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // azureAPIVersion is the Azure DevOps REST API version used throughout.
@@ -13,13 +17,16 @@ const azureAPIVersion = "7.1"
 
 // Azure runs the pipeline in an Azure Repos repository, authenticated with
 // a personal access token. The YAML pipeline definition is looked up by
-// name and created when missing.
+// name and created when missing. With Pool set, every job runs on that
+// self-hosted agent pool instead of the Microsoft-hosted one the
+// conversion picked.
 type Azure struct {
 	BaseURL  string // https://dev.azure.com
 	Org      string
 	Project  string
 	Repo     string
 	Pipeline string // definition name
+	Pool     string // optional self-hosted agent pool
 	Token    string
 	Secret   string // value given to the E2E_SECRET pipeline variable
 
@@ -34,6 +41,7 @@ func newAzure(env func(string) string) (*Azure, []string) {
 		Project:  env("E2E_AZURE_PROJECT"),
 		Repo:     env("E2E_AZURE_REPO"),
 		Pipeline: or(env("E2E_AZURE_PIPELINE"), "ci-shift-e2e"),
+		Pool:     strings.TrimSpace(env("E2E_AZURE_POOL")),
 		Token:    env("E2E_AZURE_TOKEN"),
 	}
 	return a, missing(map[string]string{
@@ -70,6 +78,75 @@ func (a *Azure) path(p string, q url.Values) string {
 // Remote implements Provider. Azure Repos accepts any user name with a PAT.
 func (a *Azure) Remote() Remote {
 	return Remote{URL: a.projectURL() + "/_git/" + url.PathEscape(a.Repo), Username: "pat", Password: a.Token}
+}
+
+// Adapt implements Adapter: with Pool set, it points every pool of the
+// converted pipeline at that self-hosted pool.
+func (a *Azure) Adapt(files map[string][]byte) error {
+	if a.Pool == "" {
+		return nil
+	}
+	const path = "azure-pipelines.yml"
+	data, ok := files[path]
+	if !ok {
+		return fmt.Errorf("no %s to adapt", path)
+	}
+	out, err := setPool(data, a.Pool)
+	if err != nil {
+		return err
+	}
+	files[path] = out
+	return nil
+}
+
+// setPool replaces every pool of an Azure pipeline (top level, stages,
+// jobs) with the named pool, keeping the rest of the document.
+func setPool(src []byte, pool string) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(src, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, errors.New("not a YAML mapping")
+	}
+	replaced := 0
+	var walk func(m *yaml.Node)
+	walk = func(m *yaml.Node) {
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			key, val := m.Content[i], m.Content[i+1]
+			switch key.Value {
+			case "pool":
+				m.Content[i+1] = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: pool},
+				}}
+				replaced++
+			case "stages", "jobs":
+				if val.Kind != yaml.SequenceNode {
+					continue
+				}
+				for _, item := range val.Content {
+					if item.Kind == yaml.MappingNode {
+						walk(item)
+					}
+				}
+			}
+		}
+	}
+	walk(doc.Content[0])
+	if replaced == 0 {
+		return nil, errors.New("the pipeline sets no pool to replace")
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // Setup implements Provider: it finds (or creates) the pipeline definition
@@ -223,6 +300,12 @@ func (a *Azure) Refresh(ctx context.Context, run *Run) (*Run, error) {
 		return run, err
 	}
 	return a.run(b), nil
+}
+
+// Cancel implements Canceler.
+func (a *Azure) Cancel(ctx context.Context, run *Run) error {
+	body := map[string]any{"status": "cancelling"}
+	return a.client().do(ctx, http.MethodPatch, a.path("/build/builds/"+run.ID, nil), body, nil)
 }
 
 // Jobs implements Provider: the Job records of the build timeline. Matrix

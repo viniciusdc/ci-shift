@@ -50,7 +50,7 @@ var Jobs = []Job{
 	{ID: "artifact-produce", Checks: "a job publishes an artifact"},
 	{ID: "artifact-consume", Checks: "a dependent job runs after it and reads the artifact's content"},
 	{ID: "matrix-legs", Legs: 2, Checks: "the matrix fans out into one leg per value, each seeing its own value"},
-	{ID: "env-vars", Checks: "pipeline, job and step variables have their values; the E2E_SECRET secret is set"},
+	{ID: "env-vars", Checks: "scripts stop at the first failing command; pipeline, job and step variables have their values; the E2E_SECRET secret is set"},
 	{ID: "postgres-service", Checks: "a postgres:16 service container accepts TCP connections on 5432"},
 	{ID: "cache-roundtrip", Checks: "the cache restore/save steps run"},
 	{ID: "on-test-branch", Checks: "a job conditioned on the e2e/ branch prefix runs"},

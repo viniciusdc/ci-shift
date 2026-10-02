@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/viniciusdc/ci-shift/e2e/conformance"
+	"github.com/viniciusdc/ci-shift/schema"
 )
 
 // fakeAPI serves canned JSON by "METHOD path" (path without the query)
@@ -358,6 +361,57 @@ func TestAzureExistingPipeline(t *testing.T) {
 	}
 	if f.saw("POST /o/p/_apis/pipelines") {
 		t.Error("an existing pipeline must not be recreated")
+	}
+}
+
+func TestAzureCancel(t *testing.T) {
+	f, srv := newFakeAPI(t, func(*http.Request) bool { return true })
+	var body string
+	f.routes["PATCH /o/p/_apis/build/builds/7"] = func(w http.ResponseWriter, _ *http.Request, b string) {
+		body = b
+		_, _ = w.Write([]byte(`{}`))
+	}
+	a := &Azure{BaseURL: srv.URL, Org: "o", Project: "p", Token: "t"}
+	if err := a.Cancel(context.Background(), &Run{ID: "7"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, `"status":"cancelling"`) {
+		t.Errorf("cancel body %s", body)
+	}
+}
+
+func TestAzurePool(t *testing.T) {
+	conv, err := conformance.Convert("azure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := Files(conv)
+	hosted := strings.Count(string(conv.Output), "vmImage:")
+	if hosted == 0 {
+		t.Fatal("the converted pipeline sets no vmImage; the test needs updating")
+	}
+
+	if err := (&Azure{}).Adapt(files); err != nil || string(files[conv.Path]) != string(conv.Output) {
+		t.Fatalf("without a pool the pipeline must be unchanged (err %v)", err)
+	}
+
+	if err := (&Azure{Pool: "e2e-pool"}).Adapt(files); err != nil {
+		t.Fatal(err)
+	}
+	out := string(files[conv.Path])
+	if strings.Contains(out, "vmImage:") || strings.Count(out, "name: e2e-pool") != hosted {
+		t.Errorf("want all %d pools on e2e-pool, got:\n%s", hosted, out)
+	}
+	if !strings.HasPrefix(out, "# Converted by ci-shift") {
+		t.Error("the header comment was lost")
+	}
+	issues, err := schema.Validate("azure", files[conv.Path], schema.Options{Embedded: true})
+	if err != nil || len(issues) > 0 {
+		t.Errorf("adapted pipeline fails the schema: %v %v", err, issues)
+	}
+
+	if _, err := setPool([]byte("steps:\n  - script: echo\n"), "x"); err == nil {
+		t.Error("a pipeline without a pool must be an error")
 	}
 }
 

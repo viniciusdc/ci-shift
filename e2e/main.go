@@ -126,11 +126,11 @@ func secretsOf(p runner.Provider) []string {
 // writeFiles writes every candidate's pushed files under dir/<provider>/.
 func writeFiles(dir string, cands []runner.Candidate) error {
 	for _, c := range cands {
-		conv, err := conformance.Convert(c.Name)
+		files, err := runner.Prepare(c)
 		if err != nil {
 			return err
 		}
-		for path, data := range runner.Files(conv) {
+		for path, data := range files {
 			full := filepath.Join(dir, c.Name, filepath.FromSlash(path))
 			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 				return err

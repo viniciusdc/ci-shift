@@ -32,7 +32,7 @@ reports that provider as **skipped**, and the job stays green.
 | `artifact-produce` | it writes `handoff/token.txt` and publishes it | artifact upload |
 | `artifact-consume` | it runs after `artifact-produce` and reads `made-by-produce` from the artifact | `needs`, artifact passing |
 | `matrix-legs` | there are exactly two legs, each with a value from `red`/`blue` | matrix expansion, `${{ matrix.* }}` |
-| `env-vars` | pipeline-, job- and step-level variables have their values, and `E2E_SECRET` is non-empty (checked with `test -n`, never printed) | variable scoping, secret mapping |
+| `env-vars` | scripts stop at the first failing command (`errexit`, as GitHub's `bash -e`), pipeline-, job- and step-level variables have their values, and `E2E_SECRET` is non-empty (checked with `test -n`, never printed) | shell semantics, variable scoping, secret mapping |
 | `postgres-service` | a `postgres:16` service accepts TCP connections on 5432 (`postgres`, `localhost` or `127.0.0.1`, whichever the provider uses) | service containers |
 | `cache-roundtrip` | the cache restore and save steps run | cache steps |
 | `on-test-branch` | it runs, because its condition matches the `e2e/` branch prefix | branch conditions |
@@ -190,21 +190,29 @@ paused pipeline as failed.
 
 ### Azure DevOps
 
-About 30 minutes, plus waiting for the free build capacity.
+About 30 minutes.
 
 1. At [dev.azure.com](https://dev.azure.com), create an organization and a
    **private** project (new public projects are no longer allowed), then in
    **Repos** initialize the repository with a README on `main`.
-2. Get the free Microsoft-hosted parallel job (1 job, 1,800 minutes a month;
-   private projects have none until then). **Organization settings › Billing
-   › Set up billing** and link an Azure subscription in the same Microsoft
-   Entra directory. It must be a paid (pay-as-you-go) subscription: the Azure
-   free trial is not accepted. The free job itself costs nothing. Check
-   **Organization settings › Pipelines › Parallel jobs**: it should show 1
-   Microsoft-hosted job. If it still shows 0, submit
-   https://aka.ms/azpipelines-parallelism-request, which Microsoft answers in
-   about 4–5 business days.
-3. Commit the converted pipeline to `main`, since Azure reads it when the
+2. **Organization settings › Billing › Set up billing** and link an Azure
+   subscription in the same Microsoft Entra directory. It must be a paid
+   (pay-as-you-go) subscription: the Azure free trial is not accepted.
+   Billing grants the free Microsoft-hosted job (1 job, 1,800 minutes a
+   month) automatically; the old request form is retired. The free job
+   itself costs nothing. **Organization settings › Pipelines › Parallel
+   jobs** should show it.
+3. Create a self-hosted agent pool for the run: **Organization settings ›
+   Agent pools › Add pool**, type **Self-hosted**, name `ci-shift-e2e`,
+   with **Grant access permission to all pipelines** ticked. During an
+   Azure run the workflow registers the GitHub Actions machine in this
+   pool as a temporary agent and removes it afterwards. Jobs then start at
+   once; on the free Microsoft-hosted job, each one can wait minutes for an
+   agent, and the whole run takes about 45 minutes. Self-hosted jobs use the
+   organization's free self-hosted parallel job (no minute limit), not the
+   1,800 hosted minutes. Skip this step to stay on the hosted agent, and
+   leave `E2E_AZURE_POOL` unset.
+4. Commit the converted pipeline to `main`, since Azure reads it when the
    pipeline is created:
 
    ```bash
@@ -215,15 +223,17 @@ About 30 minutes, plus waiting for the free build capacity.
    Then let the first run create the pipeline, or create it yourself under
    **Pipelines › New pipeline › Azure Repos Git › Existing Azure Pipelines
    YAML file**, **Save** without running, and rename it `ci-shift-e2e`.
-4. **Organization settings › Pipelines › Settings**: leave **Disable implied
+5. **Organization settings › Pipelines › Settings**: leave **Disable implied
    YAML CI trigger** off (the default), or pushes to `e2e/*` start nothing.
    The runner queues a build itself after two minutes, but the trigger is
    faster.
-5. **User settings › Personal access tokens › New Token**, scoped to this
+6. **User settings › Personal access tokens › New Token**, scoped to this
    organization (global PATs stop working on 2026-12-01), with **Code: Read &
    write** and **Build: Read & execute**. Those cover the push, creating the
-   pipeline, its secret variable, queueing builds and reading their results.
-6. Add to the `e2e` environment:
+   pipeline, its secret variable, queueing and cancelling builds and reading
+   their results. With the pool from step 3, also tick **Agent Pools: Read &
+   manage**, which registering the temporary agent needs.
+7. Add to the `e2e` environment:
 
 | Kind | Name | Value |
 |---|---|---|
@@ -231,12 +241,21 @@ About 30 minutes, plus waiting for the free build capacity.
 | variable | `E2E_AZURE_ORG` | organization name |
 | variable | `E2E_AZURE_PROJECT` | project name |
 | variable | `E2E_AZURE_REPO` | repository name |
+| variable | `E2E_AZURE_POOL` | optional; the self-hosted pool from step 3 (`ci-shift-e2e`) |
 | variable | `E2E_AZURE_PIPELINE` | optional; pipeline name, default `ci-shift-e2e` |
 
 The runner stores `E2E_SECRET` as a secret variable on the pipeline
 definition. The converted YAML maps it into the step's `env`, because Azure
-does not expose secrets on its own. With a single free parallel job, runs
-queue behind any other build in the organization.
+does not expose secrets on its own. With `E2E_AZURE_POOL` set, the runner
+replaces every `pool:` of the converted pipeline with that pool before the
+push; that is the only change it makes to the conversion. A run that is
+still going when the runner gives up is cancelled before its branch is
+deleted.
+
+To run against the pool locally, start an agent in it on your machine
+(Docker required, see Microsoft's
+[Linux agent guide](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/linux-agent))
+and set `E2E_AZURE_POOL` for `go run ./e2e`.
 
 ### CircleCI
 
@@ -287,7 +306,7 @@ account's quota. The estimates below are rough.
 |---|---|---|
 | GitLab | 400 compute minutes a month | ~10 jobs × ~1 min |
 | Bitbucket | 50 build minutes a month, per workspace | ~9 steps × ~1 min, the scarcest budget |
-| Azure DevOps | 1,800 minutes a month with the free grant | ~10 jobs × ~1 min |
+| Azure DevOps | 1,800 hosted minutes a month with the free grant; self-hosted (`E2E_AZURE_POOL`) is unlimited | ~10 jobs × ~1 min; on the hosted job, ~45 min of GitHub time waiting for agents |
 | CircleCI | 30,000 credits a month | ~10 jobs × ~1 min on a medium Docker executor (~10 credits a minute) |
 
 ## Layout

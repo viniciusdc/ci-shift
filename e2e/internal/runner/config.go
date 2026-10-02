@@ -36,6 +36,7 @@ func Select(names []string, env func(string) string, secret string) ([]Candidate
 			c.P, c.Missing = p, miss
 		case "azure":
 			p, miss := newAzure(env)
+			p.Secret = secret
 			c.P, c.Missing = p, miss
 		case "circleci":
 			p, miss := newCircleCI(env)

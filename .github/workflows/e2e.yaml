@@ -69,6 +69,28 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Azure with E2E_AZURE_POOL: this machine joins that self-hosted pool
+      # as a temporary agent for the run, so jobs start at once instead of
+      # waiting for the free Microsoft-hosted agent. The token reaches
+      # config.sh only; the running agent publishes its environment as
+      # capabilities, so it is started without it.
+      - name: Start an Azure Pipelines agent
+        id: azure-agent
+        if: matrix.provider == 'azure' && vars.E2E_AZURE_POOL != ''
+        env:
+          AGENT_VERSION: 5.279.0
+          VSTS_AGENT_INPUT_URL: https://dev.azure.com/${{ vars.E2E_AZURE_ORG }}
+          VSTS_AGENT_INPUT_AUTH: pat
+          VSTS_AGENT_INPUT_TOKEN: ${{ secrets.E2E_AZURE_TOKEN }}
+          VSTS_AGENT_INPUT_POOL: ${{ vars.E2E_AZURE_POOL }}
+          VSTS_AGENT_INPUT_AGENT: github-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/azure-agent"
+          cd "$RUNNER_TEMP/azure-agent"
+          curl -fsSL "https://download.agent.dev.azure.com/agent/$AGENT_VERSION/vsts-agent-linux-x64-$AGENT_VERSION.tar.gz" | tar -xz
+          ./config.sh --unattended --acceptTeeEula --replace
+          env -u VSTS_AGENT_INPUT_TOKEN nohup ./run.sh > agent.log 2>&1 &
+
       # Each job only receives its own provider's credentials. The runner
       # decides whether they are complete and skips the provider otherwise.
       - name: Run the conformance pipeline
@@ -86,8 +108,24 @@ jobs:
           E2E_AZURE_PROJECT: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PROJECT || '' }}
           E2E_AZURE_REPO: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_REPO || '' }}
           E2E_AZURE_PIPELINE: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PIPELINE || '' }}
+          E2E_AZURE_POOL: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_POOL || '' }}
           E2E_CIRCLECI_TOKEN: ${{ matrix.provider == 'circleci' && secrets.E2E_CIRCLECI_TOKEN || '' }}
           E2E_CIRCLECI_GH_TOKEN: ${{ matrix.provider == 'circleci' && secrets.E2E_CIRCLECI_GH_TOKEN || '' }}
           E2E_CIRCLECI_REPO: ${{ matrix.provider == 'circleci' && vars.E2E_CIRCLECI_REPO || '' }}
           E2E_CIRCLECI_SLUG: ${{ matrix.provider == 'circleci' && vars.E2E_CIRCLECI_SLUG || '' }}
         run: go run ./e2e -providers "$PROVIDER" -timeout 30m
+
+      - name: Remove the Azure Pipelines agent
+        if: always() && steps.azure-agent.outcome != 'skipped'
+        working-directory: ${{ runner.temp }}/azure-agent
+        env:
+          VSTS_AGENT_INPUT_AUTH: pat
+          VSTS_AGENT_INPUT_TOKEN: ${{ secrets.E2E_AZURE_TOKEN }}
+        run: |
+          pkill -f Agent.Listener || true
+          if [ -f .agent ]; then
+            ./config.sh remove --unattended
+          fi
+          echo "::group::Agent log"
+          tail -n 200 agent.log || true
+          echo "::endgroup::"

@@ -90,6 +90,20 @@ type Trigger interface {
 	Start(ctx context.Context, branch string) (*Run, error)
 }
 
+// Adapter is implemented by providers that adjust the converted files for
+// the test account before the push, for settings that are not part of the
+// conversion (a self-hosted agent pool, for example).
+type Adapter interface {
+	Adapt(files map[string][]byte) error
+}
+
+// Canceler is implemented by providers that can stop a run. A run that is
+// still going when the harness gives up is canceled before its branch is
+// deleted, so jobs still queued do not fail on the missing branch.
+type Canceler interface {
+	Cancel(ctx context.Context, run *Run) error
+}
+
 // Pusher publishes files to a branch of a remote and deletes branches.
 type Pusher interface {
 	Push(ctx context.Context, r Remote, branch string, files map[string][]byte) (commit string, err error)
@@ -180,6 +194,22 @@ func Files(c *conformance.Converted) map[string][]byte {
 	}
 }
 
+// Prepare converts the pipeline for a candidate and returns the files to
+// push, adjusted by the provider when it implements Adapter.
+func Prepare(c Candidate) (map[string][]byte, error) {
+	conv, err := conformance.Convert(c.Name)
+	if err != nil {
+		return nil, err
+	}
+	files := Files(conv)
+	if a, ok := c.P.(Adapter); ok {
+		if err := a.Adapt(files); err != nil {
+			return nil, fmt.Errorf("adapt %s: %w", conv.Path, err)
+		}
+	}
+	return files, nil
+}
+
 // Execute runs every candidate in turn and returns their results.
 func Execute(ctx context.Context, cands []Candidate, push Pusher, opts Options) []Result {
 	opts.defaults()
@@ -203,13 +233,13 @@ func runOne(ctx context.Context, c Candidate, push Pusher, opts Options) Result 
 	logf := func(format string, args ...any) {
 		fmt.Fprintf(opts.Log, "%s: "+format+"\n", append([]any{c.Name}, args...)...)
 	}
-	conv, err := conformance.Convert(c.Name)
+	files, err := Prepare(c)
 	if err != nil {
 		return fail(res, err)
 	}
 	if opts.DryRun {
 		res.Outcome = OutcomeDryRun
-		for path, data := range Files(conv) {
+		for path, data := range files {
 			res.Files = append(res.Files, fmt.Sprintf("%s (%d bytes)", path, len(data)))
 		}
 		sort.Strings(res.Files)
@@ -234,7 +264,7 @@ func runOne(ctx context.Context, c Candidate, push Pusher, opts Options) Result 
 		return fail(res, fmt.Errorf("setup: %w", err))
 	}
 	logf("pushing %s", res.Branch)
-	commit, err := push.Push(ctx, p.Remote(), res.Branch, Files(conv))
+	commit, err := push.Push(ctx, p.Remote(), res.Branch, files)
 	// Delete the branch whatever happens next, even after a failed push
 	// that may have created it, with a context that survives the timeout.
 	defer func() {
@@ -252,6 +282,7 @@ func runOne(ctx context.Context, c Candidate, push Pusher, opts Options) Result 
 	run, err := wait(ctx, p, res.Branch, commit, opts, logf)
 	res.Run = run
 	if err != nil {
+		cancelRun(ctx, p, run, logf)
 		return fail(res, err)
 	}
 	jobs, err := p.Jobs(ctx, run)
@@ -271,6 +302,22 @@ func runOne(ctx context.Context, c Candidate, push Pusher, opts Options) Result 
 		res.Reason = "the run finished as " + run.Raw
 	}
 	return res
+}
+
+// cancelRun stops a run that has not finished, with a context that
+// survives the timeout. Providers that cannot cancel leave the run going.
+func cancelRun(ctx context.Context, p Provider, run *Run, logf func(string, ...any)) {
+	c, ok := p.(Canceler)
+	if !ok || run == nil || run.Status.Final() {
+		return
+	}
+	cctx, ccancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer ccancel()
+	if err := c.Cancel(cctx, run); err != nil {
+		logf("could not cancel run %s: %v", run.ID, err)
+	} else {
+		logf("canceled run %s", run.ID)
+	}
 }
 
 func fail(res Result, err error) Result {

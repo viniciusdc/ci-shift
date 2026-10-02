@@ -63,6 +63,12 @@ jobs:
     env:
       JOB_VAR: job-level
     steps:
+      # GitHub runs scripts with bash -e: a failing line fails the step.
+      # The other checks rely on that, so a target whose shell keeps going
+      # must fail here instead of passing on the last line alone.
+      - name: The script stops at the first failing command
+        run: |
+          case "$-" in *e*) ;; *) echo "errexit is off: only the last line decides the step"; exit 1 ;; esac
       - name: Variables and the secret reach the script
         env:
           STEP_VAR: step-level

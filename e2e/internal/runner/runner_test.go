@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -196,6 +197,51 @@ func TestExecuteTimesOut(t *testing.T) {
 	}
 }
 
+// cancelProvider records the order of cancel and branch deletion.
+type cancelProvider struct {
+	fakeProvider
+	events *[]string
+}
+
+func (c *cancelProvider) Cancel(_ context.Context, run *Run) error {
+	*c.events = append(*c.events, "cancel "+run.ID)
+	return nil
+}
+
+type orderPusher struct {
+	fakePusher
+	events *[]string
+}
+
+func (p *orderPusher) Delete(ctx context.Context, r Remote, branch string) error {
+	*p.events = append(*p.events, "delete "+branch)
+	return p.fakePusher.Delete(ctx, r, branch)
+}
+
+func TestExecuteCancelsUnfinishedRunBeforeDeleting(t *testing.T) {
+	var events []string
+	p := &cancelProvider{fakeProvider: fakeProvider{name: "azure", states: []Status{StatusRunning}}, events: &events}
+	opts := fast
+	opts.Timeout = 20 * time.Millisecond
+	res := Execute(context.Background(), []Candidate{{Name: "azure", P: p}}, &orderPusher{events: &events}, opts)
+	if res[0].Outcome != OutcomeFailed {
+		t.Fatalf("got %+v", res[0])
+	}
+	want := []string{"cancel 7", "delete e2e/1-1-azure"}
+	if strings.Join(events, ",") != strings.Join(want, ",") {
+		t.Errorf("events %v, want %v", events, want)
+	}
+}
+
+func TestExecuteDoesNotCancelFinishedRun(t *testing.T) {
+	var events []string
+	p := &cancelProvider{fakeProvider: fakeProvider{name: "azure", states: []Status{StatusSuccess}, jobs: passingJobs()}, events: &events}
+	Execute(context.Background(), []Candidate{{Name: "azure", P: p}}, &orderPusher{events: &events}, fast)
+	if len(events) != 1 || !strings.HasPrefix(events[0], "delete ") {
+		t.Errorf("events %v, want only the branch deletion", events)
+	}
+}
+
 func TestExecuteNoRunTimesOut(t *testing.T) {
 	p := &fakeProvider{name: "gitlab", findNil: 1 << 30, states: []Status{StatusRunning}}
 	opts := fast
@@ -297,6 +343,16 @@ func TestSelect(t *testing.T) {
 	}
 	if cands[1].Name != "azure" || len(cands[1].Missing) == 0 {
 		t.Errorf("azure should be missing settings: %+v", cands[1])
+	}
+	// Every provider that sets E2E_SECRET through its API must receive it.
+	all, err := Select(conformance.Targets, func(string) string { return "" }, "s3cret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range all {
+		if got := reflect.ValueOf(c.P).Elem().FieldByName("Secret").String(); got != "s3cret" {
+			t.Errorf("%s: Secret = %q, want the generated value", c.Name, got)
+		}
 	}
 	if _, err := Select([]string{"jenkins"}, func(string) string { return "" }, ""); err == nil {
 		t.Error("unknown providers must be rejected")
