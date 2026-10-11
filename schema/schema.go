@@ -1,5 +1,4 @@
-// Package schema validates CI configuration files against the providers'
-// published JSON schemas.
+// Package schema validates pipeline files against the providers' JSON schemas.
 //
 // Schemas come from two places. Snapshots of every schema are embedded in
 // the binary, so validation works offline and deterministically. Update

@@ -247,26 +247,26 @@ and adding its schema URL to `schema/schema.go`.
 Makefile            Build, test, lint, schema and docs targets
 cmd/                Executable entry points
   cishift/          cishift translates CI/CD pipelines between providers
-convert/            convert wires the providers together: detection, parsing, emitting and…
+convert/            convert wires the providers together
 docs/               CLI reference, lockfile and translation guides
   diagrams/         Diagram sources (TOML) for gendiagram
 docsmith.toml       Configuration for the docs generators
 e2e/                Runs the conformance pipeline on real CI providers
-  conformance/      conformance holds the pipeline that the live end-to-end tests run on…
+  conformance/      conformance holds the pipeline the live tests run on every provider
   internal/         Packages private to the live tests
-    runner/         runner pushes the converted conformance pipeline to real CI providers,…
+    runner/         runner pushes the conformance pipeline to real CI providers
 go.mod              Module github.com/viniciusdc/ci-shift
 internal/           Packages private to this module
   buildinfo/        buildinfo reports the version of the running cishift binary
   cli/              cli implements the cishift command line
-  lockfile/         lockfile records which pipeline files cishift generated, from what, and…
+  lockfile/         lockfile records which pipeline files cishift generated and from what
   tools/            Maintenance commands, run through make
     genbanner/      Generates the README banner SVGs from docsmith.toml
     gendiagram/     Generates architecture diagram SVGs from TOML definitions
     gendocs/        Generates the CLI reference and project layout sections of the docs
     genexamples/    Generates executable documentation snippets
-    updateschemas/  updateschemas refreshes the schema snapshots embedded in the schema…
-  yamlx/            yamlx provides small helpers for reading YAML documents in an…
+    updateschemas/  Refreshes the schema snapshots built into cishift
+  yamlx/            yamlx reads and writes YAML documents, keeping the order of keys
 ir/                 ir defines ci-shift's provider-neutral pipeline model
 providers/          One parser + emitter per CI provider
   azure/            azure converts Azure Pipelines YAML definitions to and from the IR
@@ -274,7 +274,7 @@ providers/          One parser + emitter per CI provider
   circleci/         circleci converts CircleCI 2.1 configurations to and from the IR
   github/           github converts GitHub Actions workflows to and from the IR
   gitlab/           gitlab converts GitLab CI/CD configurations to and from the IR
-schema/             schema validates CI configuration files against the providers'…
+schema/             schema validates pipeline files against the providers' JSON schemas
   snapshots/        Provider JSON schemas built into the binary
 ```
 <!-- /gendocs:layout -->

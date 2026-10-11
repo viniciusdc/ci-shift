@@ -1,5 +1,6 @@
-// Package lockfile records which pipeline files cishift generated, from
-// what, and with which versions, so they can be verified and regenerated.
+// Package lockfile records which pipeline files cishift generated and from
+// what. Each entry also keeps the versions and hashes needed to verify and
+// regenerate the file.
 package lockfile
 
 import (
