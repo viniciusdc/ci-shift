@@ -27,16 +27,12 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// ── Typography ───────────────────────────────────────────────────────────────
-
 const (
 	fontMono = "ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace"
 	fontSans = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 )
 
-// ── Themes ───────────────────────────────────────────────────────────────────
-
-// Theme holds all colour tokens for one render pass.
+// Theme holds all color tokens for one render pass.
 type Theme struct {
 	Name string
 
@@ -117,8 +113,6 @@ var light = Theme{
 	MutedText:     "#57606a",
 }
 
-// ── TOML definition ──────────────────────────────────────────────────────────
-
 // Def is the top-level TOML structure for a diagram definition.
 type Def struct {
 	Title     string     `toml:"title"`
@@ -126,7 +120,7 @@ type Def struct {
 	Width     float64    `toml:"width"`     // explicit canvas width; when set, nodes must supply x/y
 	Height    float64    `toml:"height"`    // explicit canvas height
 	Scale     float64    `toml:"scale"`     // uniform output scale multiplier (default 1.0)
-	ShowGrid  bool       `toml:"show_grid"` // render debug grid lines (column/row anchors); never set in production
+	ShowGrid  bool       `toml:"show_grid"` // render debug grid lines (column/row anchors)
 	Nodes     []NodeDef  `toml:"nodes"`
 	Edges     []EdgeDef  `toml:"edges"`
 	Groups    []GroupDef `toml:"groups"`
@@ -157,8 +151,6 @@ type GroupDef struct {
 	Contains []string `toml:"contains"`
 }
 
-// ── Layout constants ─────────────────────────────────────────────────────────
-
 const (
 	hGap      = 22.0 // horizontal gap between layers
 	vGap      = 10.0 // vertical gap between nodes in the same layer
@@ -174,8 +166,6 @@ const (
 	nodeMinW  = 56.0 // minimum node width
 	nodeH     = 30.0 // fixed node height (single-line)
 )
-
-// ── Layout data structures ───────────────────────────────────────────────────
 
 type lNode struct {
 	def     *NodeDef
@@ -208,8 +198,7 @@ type layout struct {
 	height float64
 }
 
-// ── Node sizing ──────────────────────────────────────────────────────────────
-
+// autoW returns a node width that fits label, rounded up to a multiple of 4.
 func autoW(label string) float64 {
 	maxLen := 0
 	for _, line := range strings.Split(label, "\n") {
@@ -224,8 +213,8 @@ func autoW(label string) float64 {
 	return math.Ceil(w/4) * 4
 }
 
-// ── Topological sort (Kahn) ──────────────────────────────────────────────────
-
+// topoSort orders the node IDs topologically (Kahn's algorithm), taking
+// ready nodes in ID order.
 func topoSort(def *Def) []string {
 	adj := map[string][]string{}
 	indeg := map[string]int{}
@@ -261,8 +250,6 @@ func topoSort(def *Def) []string {
 	return result
 }
 
-// ── Layout computation ───────────────────────────────────────────────────────
-
 func compute(def *Def) *layout {
 	if def.Width > 0 {
 		return computeExplicit(def)
@@ -283,7 +270,6 @@ func computeExplicit(def *Def) *layout {
 		byID[nd.ID] = &lNode{def: nd, x: nd.X, y: nd.Y, w: w, h: nodeH, origIdx: i}
 	}
 
-	// Build group membership
 	groupMembers := map[string][]*lNode{}
 	for i := range def.Groups {
 		g := &def.Groups[i]
@@ -295,7 +281,6 @@ func computeExplicit(def *Def) *layout {
 		}
 	}
 
-	// Uniform width within each group (use the widest member)
 	for _, members := range groupMembers {
 		maxW := 0.0
 		for _, n := range members {
@@ -310,7 +295,6 @@ func computeExplicit(def *Def) *layout {
 
 	groups := buildGroups(def, byID, groupMembers)
 
-	// Edges — bypass when the horizontal span is large (> 2× a typical node gap)
 	var edges []*lEdge
 	for i := range def.Edges {
 		ed := &def.Edges[i]
@@ -319,9 +303,10 @@ func computeExplicit(def *Def) *layout {
 		if !ok1 || !ok2 {
 			continue
 		}
-		// Bypass only when source is far left AND below the target — routing
-		// below the canvas avoids the edge crossing the stage area. When the
-		// source is above the target the bezier curves down naturally.
+		// Bypass only when the source ends more than 200px left of the target
+		// and sits below it: routing below the canvas keeps the edge out of the
+		// stage area. When the source is above the target the curve bends down
+		// on its own.
 		bypass := (to.x-from.x-from.w) > 200 && (from.y+from.h/2) > (to.y+to.h/2)
 		edges = append(edges, &lEdge{def: ed, from: from, to: to, bypass: bypass})
 	}
@@ -344,14 +329,12 @@ func computeExplicit(def *Def) *layout {
 
 // computeAuto assigns layers topologically and positions nodes automatically.
 func computeAuto(def *Def) *layout {
-	// Build node map
 	byID := map[string]*lNode{}
 	for i := range def.Nodes {
 		nd := &def.Nodes[i]
 		byID[nd.ID] = &lNode{def: nd, layer: 0, w: autoW(nd.Label), h: nodeH, origIdx: i}
 	}
 
-	// Build group membership
 	nodeGroup := map[string]string{}
 	groupMembers := map[string][]*lNode{}
 	for i := range def.Groups {
@@ -365,7 +348,6 @@ func computeAuto(def *Def) *layout {
 		}
 	}
 
-	// Uniform width within each group
 	for _, members := range groupMembers {
 		maxW := nodeMinW
 		for _, n := range members {
@@ -408,7 +390,6 @@ func computeAuto(def *Def) *layout {
 		}
 	}
 
-	// Bucket nodes by layer
 	byLayer := map[int][]*lNode{}
 	maxLayer := 0
 	for _, ln := range byID {
@@ -418,7 +399,8 @@ func computeAuto(def *Def) *layout {
 		}
 	}
 
-	// Sort within each layer: non-planned before planned, TOML definition order within each
+	// Sort each layer by group (descending ID, ungrouped last), then
+	// non-planned before planned, then definition order.
 	for l, ns := range byLayer {
 		sort.SliceStable(ns, func(i, j int) bool {
 			gi, gj := nodeGroup[ns[i].def.ID], nodeGroup[ns[j].def.ID]
@@ -434,7 +416,6 @@ func computeAuto(def *Def) *layout {
 		byLayer[l] = ns
 	}
 
-	// Compute layer widths (max node width per layer)
 	layerW := make([]float64, maxLayer+1)
 	for l := 0; l <= maxLayer; l++ {
 		for _, n := range byLayer[l] {
@@ -444,7 +425,6 @@ func computeAuto(def *Def) *layout {
 		}
 	}
 
-	// Compute layer X positions
 	layerX := make([]float64, maxLayer+1)
 	x := marginX
 	for l := 0; l <= maxLayer; l++ {
@@ -452,7 +432,6 @@ func computeAuto(def *Def) *layout {
 		x += layerW[l] + hGap
 	}
 
-	// Compute per-layer total heights
 	layerTH := make([]float64, maxLayer+1)
 	for l := 0; l <= maxLayer; l++ {
 		ns := byLayer[l]
@@ -469,7 +448,6 @@ func computeAuto(def *Def) *layout {
 	canvasH := titleH + marginY + maxTH + marginY
 	canvasW := x - hGap + marginX
 
-	// Position nodes
 	for l := 0; l <= maxLayer; l++ {
 		ns := byLayer[l]
 		startY := titleH + marginY + (maxTH-layerTH[l])/2
@@ -500,7 +478,6 @@ func computeAuto(def *Def) *layout {
 		}
 	}
 
-	// Build edges
 	var edges []*lEdge
 	for i := range def.Edges {
 		ed := &def.Edges[i]
@@ -513,7 +490,7 @@ func computeAuto(def *Def) *layout {
 		edges = append(edges, &lEdge{def: ed, from: from, to: to, bypass: bypass})
 	}
 
-	// Collect all nodes in stable order (layer, then original index)
+	// Nodes in layer order, each layer sorted as above.
 	var allNodes []*lNode
 	for l := 0; l <= maxLayer; l++ {
 		allNodes = append(allNodes, byLayer[l]...)
@@ -566,8 +543,6 @@ func buildGroups(def *Def, byID map[string]*lNode, groupMembers map[string][]*lN
 	return groups
 }
 
-// ── SVG rendering ────────────────────────────────────────────────────────────
-
 func renderSVG(lay *layout, t Theme) string {
 	var b bytes.Buffer
 	ln := func(format string, a ...any) { fmt.Fprintf(&b, format+"\n", a...) }
@@ -583,7 +558,6 @@ func renderSVG(lay *layout, t Theme) string {
 
 	ln(`<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f">`, SW, SH, SW, SH)
 
-	// ── Defs ──
 	ln(`  <defs>`)
 	// Arrowhead for solid edges.
 	// refX="7" aligns the triangle tip (at x=7) to the path endpoint so the
@@ -608,21 +582,17 @@ func renderSVG(lay *layout, t Theme) string {
 	}
 	ln(`  </defs>`)
 
-	// ── Content group (scaled) ──
 	if scale != 1.0 {
 		ln(`  <g transform="scale(%.4g)">`, scale)
 	}
 
-	// ── Background ──
 	ln(`  <rect width="%.0f" height="%.0f" fill="%s" rx="10"/>`, W, H, t.CanvasBG)
 
-	// ── Title ──
 	ln(`  <text x="%.1f" y="%.1f" font-family="%s" font-size="12" font-weight="600" fill="%s">%s</text>`,
 		marginX+4, titleH-10, fontSans, t.TitleText, html.EscapeString(lay.def.Title))
 
-	// ── Debug grid (optional, never committed with show_grid=true) ──
-	// Vertical lines at each unique node left-edge x; horizontal lines at each
-	// unique node center-y.  Useful during layout work to verify alignment.
+	// Debug grid (show_grid): vertical lines at each unique node left edge,
+	// horizontal lines at each unique node center, to check alignment.
 	if lay.def.ShowGrid {
 		colSet := map[float64]bool{}
 		rowSet := map[float64]bool{}
@@ -650,7 +620,7 @@ func renderSVG(lay *layout, t Theme) string {
 		}
 	}
 
-	// ── Groups (behind edges and nodes) ──
+	// Groups first, so edges draw over them and nodes over both.
 	for _, g := range lay.groups {
 		ln(`  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" stroke="%s" stroke-width="1" rx="8" opacity="0.85"/>`,
 			g.x, g.y, g.w, g.h, t.GroupBG, t.GroupBorder)
@@ -658,7 +628,6 @@ func renderSVG(lay *layout, t Theme) string {
 			g.x+groupPadX, g.y+groupLblH-4, fontSans, t.GroupText, html.EscapeString(g.def.Label))
 	}
 
-	// ── Edges (behind nodes) ──
 	for _, e := range lay.edges {
 		isDashed := e.def.Style == "dashed"
 		strokeColor := t.EdgeColor
@@ -697,9 +666,10 @@ func renderSVG(lay *layout, t Theme) string {
 				entryX, ty, tx, ty,
 			)
 		} else {
-			// Cubic bezier S-curve using cubic-bezier(1,-0.01,0,1.01) mapping.
-			// CP1 = (tx, fy) and CP2 = (fx, ty) — the "crossing corners" of the
-			// bounding box.  Both tangents are horizontal; dx/dt ≥ 0 everywhere.
+			// S-curve whose control points are the other two corners of the
+			// box between the endpoints, (tx, fy) and (fx, ty), each moved
+			// outward by 1% of the vertical distance. The curve leaves and
+			// enters almost horizontally and never runs backward in x.
 			ddy := ty - fy
 			c1y := fy - 0.01*ddy
 			c2y := ty + 0.01*ddy
@@ -722,7 +692,6 @@ func renderSVG(lay *layout, t Theme) string {
 		}
 	}
 
-	// ── Nodes ──
 	for _, n := range lay.nodes {
 		rx := math.Min(nodeRx, n.h/2)
 		cx := n.x + n.w/2
@@ -759,8 +728,6 @@ func renderSVG(lay *layout, t Theme) string {
 	ln(`</svg>`)
 	return b.String()
 }
-
-// ── Main ─────────────────────────────────────────────────────────────────────
 
 // config is the subset of docsmith.toml this tool reads.
 type config struct {

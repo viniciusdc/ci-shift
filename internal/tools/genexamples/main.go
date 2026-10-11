@@ -12,24 +12,18 @@
 // "✓ CI tested" footer, shown through a <picture> element that links back to
 // the .txtar; without freeze it falls back to a fenced code block.
 //
-// Recognised headers:
+// Recognized headers:
 //
 //	# doc:id      example-id        (required) marker and SVG name
 //	# doc:file    README.md         (required) file that holds the markers
 //	# doc:tested  true              the script also runs under testscript
 //	# doc:lang    console           how display.sh is highlighted (see below)
 //
-// With the default doc:lang console, display.sh is a terminal session: lines
-// starting with "$ " are commands and every other line is their output,
-// printed verbatim. Commands are drawn bright and output muted, so output
-// that happens to start with "#" (a YAML comment, say) is never mistaken for
-// a command. Any other doc:lang (bash, yaml, …) is passed to freeze as the
-// syntax to highlight.
+// With doc:lang console (the default), "$ " lines are drawn as commands and
+// every other line as their output; any other value is a freeze syntax name.
 //
-// Rendered SVGs are committed. Each one records a hash of the snippet it
-// shows, so an edited display.sh is re-rendered, and a stale SVG is never
-// reused: without freeze the example drops back to a code block, which makes
-// the drift check fail until someone re-renders it.
+// Committed SVGs carry a hash of their snippet. A stale one is re-rendered,
+// or, without freeze, becomes a code block, which fails the drift check.
 //
 // Run with:
 //
@@ -117,8 +111,6 @@ func load() (settings, error) {
 	return s, nil
 }
 
-// ── txtar parsing ─────────────────────────────────────────────────────────────
-
 // parseExample returns the doc:* headers from the txtar comment (the script
 // area before the first file) and the contents of its display.sh file.
 func parseExample(data []byte) (meta map[string]string, display string) {
@@ -139,8 +131,6 @@ func parseExample(data []byte) (meta map[string]string, display string) {
 	}
 	return meta, display
 }
-
-// ── freeze rendering ──────────────────────────────────────────────────────────
 
 // freezePath is the binary name looked up in PATH.
 var freezePath = "freeze"
@@ -293,10 +283,10 @@ const (
 	titlebarH       = 24.0
 )
 
-// addWindowTitle remaps the freeze background colour to the GitHub code-block
-// palette, injects a distinct titlebar band with a separator, and centres the
+// addWindowTitle remaps the freeze background color to the GitHub code-block
+// palette, injects a distinct titlebar band with a separator, and centers the
 // example-id label inside the titlebar. The SVG must come from freeze
-// --window (traffic-light circles centred at y=12).
+// --window (traffic-light circles centered at y=12).
 func addWindowTitle(svg, id string, isDark bool) (string, error) {
 	bgColor := "#161b22"       // GitHub dark  — code-block bg
 	titlebarColor := "#21262d" // GitHub dark  — elevated surface
@@ -326,7 +316,7 @@ func addWindowTitle(svg, id string, isDark bool) (string, error) {
 		titlebarH, svgW, titlebarH, sepColor)
 	svg = svg[:loc[0]] + bg + chrome + svg[loc[1]:]
 
-	// Centre the title after the last traffic light so it draws on top.
+	// Center the title after the last traffic light so it draws on top.
 	label := fmt.Sprintf(
 		`<text x="%.2f" y="12.00" font-family="JetBrains Mono" font-size="11" `+
 			`fill="%s" text-anchor="middle" dominant-baseline="central">%s</text>`,
@@ -396,7 +386,7 @@ func sizeOf(re *regexp.Regexp, svg string, def float64) float64 {
 	return v
 }
 
-// pictureBlock builds a centred <picture> element for dark/light SVG
+// pictureBlock builds a centered <picture> element for dark/light SVG
 // switching, wrapped in a link to the txtar source file.
 func pictureBlock(binary, id, darkRel, lightRel, txtarRel string) string {
 	alt := strings.TrimSpace(binary + " " + strings.ReplaceAll(id, "-", " "))
@@ -408,8 +398,6 @@ func pictureBlock(binary, id, darkRel, lightRel, txtarRel string) string {
 </picture></a>
 </div>`, txtarRel, darkRel, lightRel, darkRel, alt)
 }
-
-// ── doc injection ─────────────────────────────────────────────────────────────
 
 // inject replaces the content between the <!-- gendocs:example:ID --> and
 // <!-- /gendocs:example:ID --> marker lines in the file at path.
@@ -471,8 +459,6 @@ func replaceSection(doc, open, end, content string) (string, error) {
 	return b.String(), nil
 }
 
-// ── main pipeline ─────────────────────────────────────────────────────────────
-
 type injection struct {
 	id      string
 	lang    string
@@ -492,7 +478,7 @@ func run(s settings) error {
 	}
 	sort.Strings(files)
 
-	// Group injections by target file so we can report per file.
+	// Group injections by target file to report per file.
 	byFile := map[string][]injection{}
 	seen := map[string]string{}
 	for _, f := range files {
@@ -568,8 +554,6 @@ func run(s settings) error {
 	}
 	return nil
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 const configFile = "docsmith.toml"
 

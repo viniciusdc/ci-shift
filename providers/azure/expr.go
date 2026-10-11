@@ -204,9 +204,6 @@ func runtimeFormat(s string) string {
 	return fmt.Sprintf("$[ format('%s', %s) ]", strings.ReplaceAll(lit, "'", "''"), strings.Join(args, ", "))
 }
 
-// ---------------------------------------------------------------------------
-// Conditions
-
 // cexpr is a node of an Azure condition expression: a function call, a
 // string/number literal or a property reference such as
 // variables['Build.SourceBranch'].

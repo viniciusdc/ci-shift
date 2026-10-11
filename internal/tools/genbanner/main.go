@@ -4,7 +4,7 @@
 // The left half is the project title with an accent underline and a subtitle;
 // the right half is a decorative motif, either "blocks" (stacked rows of
 // rounded blocks) or "lanes" (parallel lanes with connectors that shift
-// between them). Layout is fixed; text, colours and motif geometry come from
+// between them). Layout is fixed; text, colors and motif geometry come from
 // the config, so the output is reproducible byte for byte.
 //
 // Run via:
@@ -25,15 +25,12 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// ── Canvas ───────────────────────────────────────────────────────────────────
-
 const (
 	canvasW = 860
 	canvasH = 160
 )
 
-// ── Typography (layout only — colours come from Theme) ───────────────────────
-
+// Text layout; colors come from Theme.
 const (
 	titleX       = 52
 	titleY       = 96
@@ -56,8 +53,7 @@ const (
 	fontSans = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 )
 
-// ── Motif panel ──────────────────────────────────────────────────────────────
-
+// Motif panel layout.
 const (
 	panelX    = 458
 	dividerX  = panelX - 18
@@ -67,10 +63,8 @@ const (
 	rowR      = 4
 	fadeX     = 700
 	fadeW     = canvasW - fadeX
-	stackTopY = (canvasH - (5*rowH + 4*rowGap)) / 2 // = 29
+	stackTopY = (canvasH - (5*rowH + 4*rowGap)) / 2
 )
-
-// ── Config ───────────────────────────────────────────────────────────────────
 
 // config is the subset of docsmith.toml this tool reads.
 type config struct {
@@ -112,9 +106,7 @@ type shift struct {
 	X    float64 `toml:"x"`
 }
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
-
-// Theme holds every colour used in the banner so dark and light variants share
+// Theme holds every color used in the banner so dark and light variants share
 // identical layout code.
 type Theme struct {
 	name string
@@ -126,7 +118,7 @@ type Theme struct {
 	divider string // vertical separator + horizontal rule
 	accent  string // underline, dot, glow
 
-	palette []string // motif colours, cycled
+	palette []string // motif colors, cycled
 }
 
 var dark = Theme{
@@ -166,8 +158,6 @@ func (t Theme) color(i int) string {
 	return t.palette[((i%len(t.palette))+len(t.palette))%len(t.palette)]
 }
 
-// ── Default motif geometry ───────────────────────────────────────────────────
-
 // defaultRows is the stacked-blocks motif: five rows of [x, width, opacity].
 var defaultRows = [][][]float64{
 	{{0, 130, 0.90}, {145, 72, 0.60}, {232, 105, 0.75}},
@@ -186,8 +176,6 @@ var defaultShifts = []shift{
 	{From: 2, To: 4, X: 222},
 }
 
-// ── SVG builder ───────────────────────────────────────────────────────────────
-
 type writer struct{ bytes.Buffer }
 
 func (w *writer) line(format string, args ...any) { fmt.Fprintf(w, format+"\n", args...) }
@@ -198,7 +186,6 @@ func generate(b bannerConfig, t Theme) string {
 	w.line(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`,
 		canvasW, canvasH, canvasW, canvasH)
 
-	// ── defs ─────────────────────────────────────────────────────────────────
 	w.line(`  <defs>`)
 	w.line(`    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="0">`)
 	w.line(`      <stop offset="0%%"   stop-color="%s"/>`, t.bgCard)
@@ -216,12 +203,10 @@ func generate(b bannerConfig, t Theme) string {
 	w.line(`    </filter>`)
 	w.line(`  </defs>`)
 
-	// ── Background ───────────────────────────────────────────────────────────
 	w.line(`  <rect width="%d" height="%d" fill="url(#bgGrad)"/>`, canvasW, canvasH)
 	w.line(`  <line x1="0" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1" opacity="0.08"/>`,
 		accentLineY, canvasW, accentLineY, t.divider)
 
-	// ── Motif ────────────────────────────────────────────────────────────────
 	switch b.Motif {
 	case "lanes":
 		drawLanes(&w, b, t)
@@ -232,7 +217,6 @@ func generate(b bannerConfig, t Theme) string {
 	w.line(`  <line x1="%d" y1="20" x2="%d" y2="%d" stroke="%s" stroke-width="1" opacity="0.12"/>`,
 		dividerX, dividerX, canvasH-20, t.divider)
 
-	// ── Title ────────────────────────────────────────────────────────────────
 	// Shrink long titles and subtitles so they never cross the divider.
 	titleSize := math.Min(maxTitleSize, textRoom/(monoAdvance*float64(runeLen(b.Title))))
 	subSize := math.Min(maxSubtitleSize, textRoom/(sansAdvance*float64(runeLen(b.Subtitle))))
@@ -246,7 +230,6 @@ func generate(b bannerConfig, t Theme) string {
 		accentLineX1, accentLineY, lineEnd, accentLineY, t.accent, accentLineW)
 	w.line(`  <circle cx="%.0f" cy="%d" r="3" fill="%s"/>`, lineEnd+5, accentLineY, t.accent)
 
-	// ── Subtitle ─────────────────────────────────────────────────────────────
 	w.line(`  <text x="%d" y="%d" font-family="%s" font-size="%.1f" fill="%s" letter-spacing="0.5">%s</text>`,
 		subtitleX, subtitleY, fontSans, subSize, t.sub, html.EscapeString(b.Subtitle))
 
@@ -255,7 +238,7 @@ func generate(b bannerConfig, t Theme) string {
 }
 
 // drawBlocks renders the stacked-blocks motif: rows of rounded blocks, one
-// palette colour per row.
+// palette color per row.
 func drawBlocks(w *writer, b bannerConfig, t Theme) {
 	rows := b.Rows
 	if len(rows) == 0 {
@@ -263,7 +246,7 @@ func drawBlocks(w *writer, b bannerConfig, t Theme) {
 			rows = append(rows, rowConfig{Blocks: blocks})
 		}
 	}
-	// Centre the stack vertically whatever the row count.
+	// Center the stack vertically whatever the row count.
 	top := (canvasH - (len(rows)*rowH + (len(rows)-1)*rowGap)) / 2
 	for i, row := range rows {
 		color := i
@@ -370,8 +353,6 @@ func runeLen(s string) int {
 	}
 	return n
 }
-
-// ── Entry point ───────────────────────────────────────────────────────────────
 
 func main() {
 	root, err := findRoot()
