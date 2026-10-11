@@ -14,8 +14,7 @@
 
 </div>
 
-`cishift` translates pipeline configurations from one CI provider to another
-and checks them against each provider's official JSON schema.
+The name column is what `--from`, `--to` and `--provider` take:
 
 | Provider | Name | Default file |
 |---|---|---|
@@ -84,8 +83,8 @@ as aliases, for scripts that prefer explicit verbs.
 Converted files start with a comment header naming the source. It also lists
 every **warning**: anything ci-shift dropped or approximated, such as a
 GitHub Marketplace action with no equivalent, or a GitLab `rules:changes`.
-Warnings also go to stderr. `--strict` turns them into a non-zero exit code,
-which is useful in CI:
+Warnings also go to stderr, and `--strict` turns them into a non-zero exit
+code:
 
 <!-- gendocs:example:warnings-and-strict -->
 <div align="center">
@@ -154,9 +153,9 @@ you pass `--force`:
 </div>
 <!-- /gendocs:example:lockfile -->
 
-That makes `cishift verify` a good CI step when a repository keeps pipelines
-for several providers generated from one source. `--no-lock` skips recording
-a file. The lockfile format and the lookup rules are in
+When a repository keeps pipelines for several providers generated from one
+source, run `cishift verify` in CI to catch drift. `--no-lock` skips
+recording a file. The lockfile format and the lookup rules are in
 [docs/lockfile.md](docs/lockfile.md).
 
 ## Schemas
@@ -172,8 +171,9 @@ cishift schemas reset    # go back to the built-in snapshots
 cishift check --embedded file.yml   # ignore downloaded schemas for one check
 ```
 
-Downloaded schemas are only used after an explicit `update`. No other
-command goes online, except `version --check`.
+Downloaded schemas are only used once `schemas update` or `check --latest`
+has stored them. Those two and `version --check` are the only commands that
+go online.
 
 ## What gets translated
 
@@ -184,14 +184,8 @@ including secrets and well-known CI variables such as `$CI_COMMIT_SHA` ⇄
 but never defines are treated as secrets. The full table, with how each
 concept maps between providers, is in [docs/translation.md](docs/translation.md).
 
-### Known limits
-
-- Includes and templates (`include:`, Azure `template:`, CircleCI orbs) are
-  not resolved. Convert the referenced files separately.
-- Provider-specific expressions that ci-shift cannot parse (e.g. GitHub
-  `contains(...)` conditions or job outputs) are reported and dropped.
-- Schedules on GitLab and Bitbucket live in project settings, so ci-shift
-  tells you which cron expression to create there.
+What ci-shift does not translate, such as includes and templates, is listed
+under [Known limits](docs/translation.md#known-limits).
 
 ## Library use
 
