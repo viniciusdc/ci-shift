@@ -270,14 +270,18 @@ About 30 minutes.
 
 | Kind | Name | Value |
 |---|---|---|
-| variable | `E2E_AZURE_CLIENT_ID` | with OIDC: the identity's client ID |
-| variable | `E2E_AZURE_TENANT_ID` | with OIDC: the directory (tenant) ID |
+| secret | `E2E_AZURE_CLIENT_ID` | with OIDC: the identity's client ID |
+| secret | `E2E_AZURE_TENANT_ID` | with OIDC: the directory (tenant) ID |
 | secret | `E2E_AZURE_TOKEN` | without OIDC: the PAT |
-| variable | `E2E_AZURE_ORG` | organization name |
+| secret | `E2E_AZURE_ORG` | organization name |
 | variable | `E2E_AZURE_PROJECT` | project name |
 | variable | `E2E_AZURE_REPO` | repository name |
 | variable | `E2E_AZURE_POOL` | optional; the self-hosted pool from step 3 (`ci-shift-e2e`) |
 | variable | `E2E_AZURE_PIPELINE` | optional; pipeline name, default `ci-shift-e2e` |
+
+The client ID, tenant ID and organization are not credentials, but as
+secrets they are masked in the workflow logs, which are public on a public
+repository.
 
 The federated credential trusts every workflow run that uses the `e2e`
 environment, so restrict the environment to the default branch
