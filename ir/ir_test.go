@@ -79,6 +79,99 @@ func TestMatrixCombos(t *testing.T) {
 	}
 }
 
+func TestMatrixInclude(t *testing.T) {
+	osNode := []Axis{{Name: "os", Values: []string{"linux", "windows"}}, {Name: "node", Values: []string{"18", "20"}}}
+	tests := []struct {
+		name string
+		m    Matrix
+		want [][]KV
+	}{
+		{
+			name: "only new keys extend every combination",
+			m:    Matrix{Axes: osNode, Include: [][]KV{{{"experimental", "true"}}}},
+			want: [][]KV{
+				{{"os", "linux"}, {"node", "18"}, {"experimental", "true"}},
+				{{"os", "linux"}, {"node", "20"}, {"experimental", "true"}},
+				{{"os", "windows"}, {"node", "18"}, {"experimental", "true"}},
+				{{"os", "windows"}, {"node", "20"}, {"experimental", "true"}},
+			},
+		},
+		{
+			name: "existing combination is not duplicated",
+			m:    Matrix{Axes: osNode, Include: [][]KV{{{"os", "linux"}, {"node", "18"}}}},
+			want: [][]KV{
+				{{"os", "linux"}, {"node", "18"}},
+				{{"os", "linux"}, {"node", "20"}},
+				{{"os", "windows"}, {"node", "18"}},
+				{{"os", "windows"}, {"node", "20"}},
+			},
+		},
+		{
+			name: "added value is overwritten by a later include",
+			m: Matrix{Axes: osNode, Include: [][]KV{
+				{{"os", "linux"}, {"npm", "6"}},
+				{{"node", "20"}, {"npm", "7"}},
+			}},
+			want: [][]KV{
+				{{"os", "linux"}, {"node", "18"}, {"npm", "6"}},
+				{{"os", "linux"}, {"node", "20"}, {"npm", "7"}},
+				{{"os", "windows"}, {"node", "18"}},
+				{{"os", "windows"}, {"node", "20"}, {"npm", "7"}},
+			},
+		},
+		{
+			name: "excluded combination is added back",
+			m: Matrix{
+				Axes:    osNode,
+				Exclude: [][]KV{{{"os", "windows"}}},
+				Include: [][]KV{{{"os", "windows"}, {"node", "20"}}},
+			},
+			want: [][]KV{
+				{{"os", "linux"}, {"node", "18"}},
+				{{"os", "linux"}, {"node", "20"}},
+				{{"os", "windows"}, {"node", "20"}},
+			},
+		},
+		{
+			name: "without axes every include is its own combination",
+			m:    Matrix{Include: [][]KV{{{"os", "linux"}}, {{"os", "linux"}, {"arch", "arm64"}}}},
+			want: [][]KV{
+				{{"os", "linux"}},
+				{{"os", "linux"}, {"arch", "arm64"}},
+			},
+		},
+		{
+			// docs.github.com: "Expanding or adding matrix configurations".
+			name: "github docs example",
+			m: Matrix{
+				Axes: []Axis{{Name: "fruit", Values: []string{"apple", "pear"}}, {Name: "animal", Values: []string{"cat", "dog"}}},
+				Include: [][]KV{
+					{{"color", "green"}},
+					{{"color", "pink"}, {"animal", "cat"}},
+					{{"fruit", "apple"}, {"shape", "circle"}},
+					{{"fruit", "banana"}},
+					{{"fruit", "banana"}, {"animal", "cat"}},
+				},
+			},
+			want: [][]KV{
+				{{"fruit", "apple"}, {"animal", "cat"}, {"color", "pink"}, {"shape", "circle"}},
+				{{"fruit", "apple"}, {"animal", "dog"}, {"color", "green"}, {"shape", "circle"}},
+				{{"fruit", "pear"}, {"animal", "cat"}, {"color", "pink"}},
+				{{"fruit", "pear"}, {"animal", "dog"}, {"color", "green"}},
+				{{"fruit", "banana"}},
+				{{"fruit", "banana"}, {"animal", "cat"}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.m.Combos(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("combos = %v\nwant     %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDurations(t *testing.T) {
 	for in, want := range map[string]int{"1h 30m": 90, "3 hours": 180, "45": 45, "90 minutes": 90, "30s": 1, "1 day": 1440} {
 		if got, ok := ParseMinutes(in); !ok || got != want {
