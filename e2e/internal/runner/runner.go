@@ -63,6 +63,7 @@ type Remote struct {
 	URL      string // https URL, without credentials
 	Username string
 	Password string
+	Bearer   bool // send Password as a bearer token, not Basic credentials
 }
 
 // Provider is one live CI provider.

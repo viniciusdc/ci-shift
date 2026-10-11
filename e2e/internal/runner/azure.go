@@ -59,9 +59,21 @@ func (a *Azure) projectURL() string {
 	return strings.TrimRight(a.BaseURL, "/") + "/" + url.PathEscape(a.Org) + "/" + url.PathEscape(a.Project)
 }
 
+// entraToken reports whether Token is a Microsoft Entra access token (a
+// JWT, as the workflow gets through OIDC) rather than a personal access
+// token. Azure DevOps takes the first as a bearer token and the second as
+// Basic credentials.
+func (a *Azure) entraToken() bool {
+	return strings.HasPrefix(a.Token, "eyJ") && strings.Count(a.Token, ".") == 2
+}
+
 func (a *Azure) client() *api {
 	if a.api == nil {
-		a.api = newAPI(a.projectURL()+"/_apis", basicAuth("", a.Token))
+		auth := basicAuth("", a.Token)
+		if a.entraToken() {
+			auth = bearerAuth(a.Token)
+		}
+		a.api = newAPI(a.projectURL()+"/_apis", auth)
 	}
 	return a.api
 }
@@ -75,9 +87,10 @@ func (a *Azure) path(p string, q url.Values) string {
 	return p + "?" + q.Encode()
 }
 
-// Remote implements Provider. Azure Repos accepts any user name with a PAT.
+// Remote implements Provider. Azure Repos accepts any user name with a
+// PAT, and an Entra token as a bearer token.
 func (a *Azure) Remote() Remote {
-	return Remote{URL: a.projectURL() + "/_git/" + url.PathEscape(a.Repo), Username: "pat", Password: a.Token}
+	return Remote{URL: a.projectURL() + "/_git/" + url.PathEscape(a.Repo), Username: "pat", Password: a.Token, Bearer: a.entraToken()}
 }
 
 // Adapt implements Adapter: with Pool set, it points every pool of the

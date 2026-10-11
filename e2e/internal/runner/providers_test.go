@@ -364,6 +364,22 @@ func TestAzureExistingPipeline(t *testing.T) {
 	}
 }
 
+func TestAzureEntraToken(t *testing.T) {
+	const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln"
+	f, srv := newFakeAPI(t, func(r *http.Request) bool { return r.Header.Get("Authorization") == "Bearer "+jwt })
+	f.json("GET /o/p/_apis/build/builds/7", map[string]any{"id": 7, "status": "completed", "result": "succeeded"})
+	a := &Azure{BaseURL: srv.URL, Org: "o", Project: "p", Repo: "r", Token: jwt}
+	if _, err := a.Refresh(context.Background(), &Run{ID: "7"}); err != nil {
+		t.Fatalf("an Entra token must be sent as a bearer token: %v", err)
+	}
+	if r := a.Remote(); !r.Bearer || authHeader(r) != "Authorization: Bearer "+jwt {
+		t.Errorf("git must use the bearer token too, got %+v", r)
+	}
+	if r := (&Azure{Token: "abc123pat"}).Remote(); r.Bearer || !strings.HasPrefix(authHeader(r), "Authorization: Basic ") {
+		t.Errorf("a PAT must stay Basic, got %+v", r)
+	}
+}
+
 func TestAzureCancel(t *testing.T) {
 	f, srv := newFakeAPI(t, func(*http.Request) bool { return true })
 	var body string

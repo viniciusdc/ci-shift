@@ -227,22 +227,65 @@ About 30 minutes.
    YAML CI trigger** off (the default), or pushes to `e2e/*` start nothing.
    The runner queues a build itself after two minutes, but the trigger is
    faster.
-6. **User settings › Personal access tokens › New Token**, scoped to this
-   organization (global PATs stop working on 2026-12-01), with **Code: Read &
-   write** and **Build: Read & execute**. Those cover the push, creating the
-   pipeline, its secret variable, queueing and cancelling builds and reading
-   their results. With the pool from step 3, also tick **Agent Pools: Read &
-   manage**, which registering the temporary agent needs.
+6. Give the workflow an identity. The recommended one signs in through
+   GitHub's OIDC token, so no Azure credential is stored in GitHub:
+   1. Connect the organization to a Microsoft Entra directory
+      (**Organization settings › Microsoft Entra ID › Connect directory**);
+      application identities only exist there.
+   2. Create a user-assigned managed identity in an Azure subscription of
+      that directory (free), and add a federated credential that trusts
+      GitHub for this repository's `e2e` environment only. The subject must
+      match the token exactly, and repositories with GitHub's ID-based
+      subjects get `repo:<owner>@<id>/<repo>@<id>:...`, so read the prefix
+      from the API:
+
+      ```bash
+      prefix=$(gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix)
+      az identity create -g <resource-group> -n ci-shift-e2e-github
+      az identity federated-credential create -g <resource-group> \
+        --identity-name ci-shift-e2e-github -n github-e2e-environment \
+        --issuer https://token.actions.githubusercontent.com \
+        --subject "$prefix:environment:e2e" \
+        --audiences api://AzureADTokenExchange
+      ```
+
+   3. **Organization settings › Users › Add users**: the identity, with
+      **Basic** access (Azure Repos needs it; the first five Basic users of
+      an organization are free) and the project's **Contributors** group.
+   4. If the pipeline already exists (step 4), open it, choose **Manage
+      security** from its menu, and allow **Edit build pipeline** for the
+      identity: the runner writes `E2E_SECRET` into the pipeline.
+   5. With the pool from step 3: **Organization settings › Agent pools ›
+      `ci-shift-e2e` › Security**, add the identity as **Administrator**,
+      which registering the temporary agent needs. Add the identity itself,
+      not the project's *Build Service* account or a group.
+
+   Without a directory, use a personal access token instead: **User
+   settings › Personal access tokens › New Token**, scoped to this
+   organization (global PATs stop working on 2026-12-01), with **Code: Read
+   & write**, **Build: Read & execute** and, with the pool, **Agent Pools:
+   Read & manage**. The runner tells the two apart by their form: an Entra
+   token (a JWT) is sent as a bearer token, a PAT as Basic credentials.
 7. Add to the `e2e` environment:
 
 | Kind | Name | Value |
 |---|---|---|
-| secret | `E2E_AZURE_TOKEN` | the PAT |
-| variable | `E2E_AZURE_ORG` | organization name |
+| secret | `E2E_AZURE_CLIENT_ID` | with OIDC: the identity's client ID |
+| secret | `E2E_AZURE_TENANT_ID` | with OIDC: the directory (tenant) ID |
+| secret | `E2E_AZURE_TOKEN` | without OIDC: the PAT |
+| secret | `E2E_AZURE_ORG` | organization name |
 | variable | `E2E_AZURE_PROJECT` | project name |
 | variable | `E2E_AZURE_REPO` | repository name |
 | variable | `E2E_AZURE_POOL` | optional; the self-hosted pool from step 3 (`ci-shift-e2e`) |
 | variable | `E2E_AZURE_PIPELINE` | optional; pipeline name, default `ci-shift-e2e` |
+
+The client ID, tenant ID and organization are not credentials, but as
+secrets they are masked in the workflow logs, which are public on a public
+repository.
+
+The federated credential trusts every workflow run that uses the `e2e`
+environment, so restrict the environment to the default branch
+(**Settings › Environments › e2e › Deployment branches**).
 
 The runner stores `E2E_SECRET` as a secret variable on the pipeline
 definition. The converted YAML maps it into the step's `env`, because Azure

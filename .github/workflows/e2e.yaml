@@ -58,6 +58,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: e2e
     timeout-minutes: 45
+    # id-token lets the Azure job sign in through OIDC (see below).
+    permissions:
+      contents: read
+      id-token: write
+    # The Azure identity and organization are secrets so that they are masked
+    # in the public logs; secrets can't be tested in a step's if:, so the
+    # client ID is also exposed here, to the Azure job only.
+    env:
+      AZURE_OIDC_CLIENT_ID: ${{ matrix.provider == 'azure' && secrets.E2E_AZURE_CLIENT_ID || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -69,6 +78,27 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Azure with E2E_AZURE_CLIENT_ID: sign in as that managed identity or
+      # service principal through GitHub's OIDC token, so no Azure secret is
+      # stored, and use a short-lived Microsoft Entra token for Azure DevOps
+      # (499b84ac-... is its resource ID). Without it, E2E_AZURE_TOKEN (a
+      # PAT) is used.
+      - name: Sign in to Azure
+        if: env.AZURE_OIDC_CLIENT_ID != ''
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_OIDC_CLIENT_ID }}
+          tenant-id: ${{ secrets.E2E_AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Get an Azure DevOps token
+        id: azure-token
+        if: env.AZURE_OIDC_CLIENT_ID != ''
+        run: |
+          token="$(az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798 --query accessToken -o tsv)"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       # Azure with E2E_AZURE_POOL: this machine joins that self-hosted pool
       # as a temporary agent for the run, so jobs start at once instead of
       # waiting for the free Microsoft-hosted agent. The running agent
@@ -79,9 +109,9 @@ jobs:
         if: matrix.provider == 'azure' && vars.E2E_AZURE_POOL != ''
         env:
           AGENT_VERSION: 5.279.0
-          VSTS_AGENT_INPUT_URL: https://dev.azure.com/${{ vars.E2E_AZURE_ORG }}
+          VSTS_AGENT_INPUT_URL: https://dev.azure.com/${{ secrets.E2E_AZURE_ORG }}
           VSTS_AGENT_INPUT_AUTH: pat
-          VSTS_AGENT_INPUT_TOKEN: ${{ secrets.E2E_AZURE_TOKEN }}
+          VSTS_AGENT_INPUT_TOKEN: ${{ steps.azure-token.outputs.token || secrets.E2E_AZURE_TOKEN }}
           VSTS_AGENT_INPUT_POOL: ${{ vars.E2E_AZURE_POOL }}
           VSTS_AGENT_INPUT_AGENT: github-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
@@ -103,8 +133,8 @@ jobs:
           E2E_BITBUCKET_WORKSPACE: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_WORKSPACE || '' }}
           E2E_BITBUCKET_REPO: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_REPO || '' }}
           E2E_BITBUCKET_EMAIL: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_EMAIL || '' }}
-          E2E_AZURE_TOKEN: ${{ matrix.provider == 'azure' && secrets.E2E_AZURE_TOKEN || '' }}
-          E2E_AZURE_ORG: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_ORG || '' }}
+          E2E_AZURE_TOKEN: ${{ matrix.provider == 'azure' && (steps.azure-token.outputs.token || secrets.E2E_AZURE_TOKEN) || '' }}
+          E2E_AZURE_ORG: ${{ matrix.provider == 'azure' && secrets.E2E_AZURE_ORG || '' }}
           E2E_AZURE_PROJECT: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PROJECT || '' }}
           E2E_AZURE_REPO: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_REPO || '' }}
           E2E_AZURE_PIPELINE: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PIPELINE || '' }}
@@ -120,7 +150,7 @@ jobs:
         working-directory: ${{ runner.temp }}/azure-agent
         env:
           VSTS_AGENT_INPUT_AUTH: pat
-          VSTS_AGENT_INPUT_TOKEN: ${{ secrets.E2E_AZURE_TOKEN }}
+          VSTS_AGENT_INPUT_TOKEN: ${{ steps.azure-token.outputs.token || secrets.E2E_AZURE_TOKEN }}
         run: |
           pkill -f Agent.Listener || true
           if [ -f .agent ]; then

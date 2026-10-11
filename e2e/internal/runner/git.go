@@ -76,7 +76,7 @@ func (g GitPusher) git(ctx context.Context, dir string, r Remote, args ...string
 	cmd.Env = gitEnv(os.Environ())
 	var secrets []string
 	if r.Password != "" {
-		header := "Authorization: " + basicHeader(r.Username, r.Password)
+		header := authHeader(r)
 		secrets = []string{r.Password, header, strings.TrimPrefix(header, "Authorization: Basic ")}
 		if g.Mask != nil {
 			for _, s := range secrets {
@@ -98,6 +98,14 @@ func (g GitPusher) git(ctx context.Context, dir string, r Remote, args ...string
 		return text, fmt.Errorf("git %s: %v: %s", args[0], err, strings.TrimSpace(text))
 	}
 	return text, nil
+}
+
+// authHeader is the http.extraHeader that authenticates git for r.
+func authHeader(r Remote) string {
+	if r.Bearer {
+		return "Authorization: Bearer " + r.Password
+	}
+	return "Authorization: " + basicHeader(r.Username, r.Password)
 }
 
 // gitEnv isolates git from the user's configuration (credential helpers,
