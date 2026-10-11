@@ -33,6 +33,7 @@ stages:
               path: .cache/pip
           - script: python -m pip install --upgrade pip
           - script: |-
+              set -e
               pip install ruff
               ruff check .
   - stage: test
@@ -62,6 +63,7 @@ stages:
               path: .cache/pip
           - script: python -m pip install --upgrade pip
           - script: |-
+              set -e
               pip install -r requirements.txt
               pytest --junitxml=report.xml
           - publish: report.xml
@@ -85,6 +87,7 @@ stages:
               targetPath: $(Build.SourcesDirectory)
           - script: python -m pip install --upgrade pip
           - script: |-
+              set -e
               pip install build
               python -m build
           - publish: dist
@@ -113,6 +116,7 @@ stages:
                     targetPath: $(Build.SourcesDirectory)/dist
                 - script: python -m pip install --upgrade pip
                 - script: |-
+                    set -e
                     pip install twine
                     twine upload -u __token__ -p "${PYPI_TOKEN}" dist/*
                   env:
