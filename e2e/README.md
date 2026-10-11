@@ -130,10 +130,11 @@ the provider through its API and masks it.
    private project, and initialize its repository with a README on `main`.
 2. Link a paid Azure subscription (**Organization settings › Billing**; the
    free trial is not accepted) to get the free Microsoft-hosted job.
-3. Optionally, add a self-hosted agent pool `ci-shift-e2e` with access for
-   all pipelines (**Organization settings › Agent pools**). The workflow
-   joins it as a temporary agent for each run, so jobs do not wait for the
-   hosted agent.
+3. Add a self-hosted agent pool `ci-shift-e2e` with access for all
+   pipelines (**Organization settings › Agent pools**). The workflow joins
+   it as a temporary agent for each run, and a run takes a few minutes. On
+   the free hosted job alone, each job can wait minutes for an agent and a
+   run can outlast the runner's 30-minute `-timeout`.
 4. Commit the converted pipeline to `main`, where Azure reads it when the
    first run creates the pipeline:
 
