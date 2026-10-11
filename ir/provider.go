@@ -321,19 +321,28 @@ func (m *Matrix) Combos() [][]KV {
 		}
 		out = kept
 	}
+	// Includes follow GitHub: an entry "will be added to each of the matrix
+	// combinations if none of the key:value pairs overwrite any of the
+	// original matrix values", otherwise it is a new combination. Only
+	// product combinations take entries; a later entry overwrites values an
+	// earlier one added.
+	axes := map[string]bool{}
+	for _, ax := range m.Axes {
+		axes[ax.Name] = true
+	}
+	original := len(out)
 	for _, inc := range m.Include {
 		merged := false
-		// An include that only adds new keys extends matching combinations
-		// (GitHub semantics); otherwise it is a new combination.
-		for i, c := range out {
-			if extends(c, inc) {
-				for _, kv := range inc {
-					if _, ok := KVGet(c, kv.Key); !ok {
-						out[i] = append(out[i], kv)
-					}
-				}
-				merged = true
+		for i := range out[:original] {
+			if conflicts(out[i], inc, axes) {
+				continue
 			}
+			for _, kv := range inc {
+				if !axes[kv.Key] {
+					out[i] = KVSet(out[i], kv.Key, kv.Value)
+				}
+			}
+			merged = true
 		}
 		if !merged {
 			out = append(out, append([]KV(nil), inc...))
@@ -366,19 +375,17 @@ func (m *Matrix) Vars() []string {
 	return out
 }
 
-// extends reports whether inc agrees with c on every key c has, and adds at
-// least one key c does not have... or shares all keys (then it's a match).
-func extends(c, inc []KV) bool {
-	shared := 0
+// conflicts reports whether inc changes an axis value of c.
+func conflicts(c, inc []KV, axes map[string]bool) bool {
 	for _, kv := range inc {
-		if v, ok := KVGet(c, kv.Key); ok {
-			if v != kv.Value {
-				return false
-			}
-			shared++
+		if !axes[kv.Key] {
+			continue
+		}
+		if v, _ := KVGet(c, kv.Key); v != kv.Value {
+			return true
 		}
 	}
-	return shared > 0 && shared < len(inc)
+	return false
 }
 
 func matchesAny(c []KV, patterns [][]KV) bool {

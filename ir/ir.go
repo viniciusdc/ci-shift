@@ -127,8 +127,9 @@ type Service struct {
 }
 
 // Matrix fans a job out over variable combinations. Axes form a cartesian
-// product; Include adds extra (or, without Axes, explicit) combinations and
-// Exclude removes combinations from the product.
+// product; Exclude removes combinations from the product; Include extends
+// product combinations or adds new ones, with GitHub's semantics (without
+// Axes, each entry is its own combination).
 type Matrix struct {
 	Axes    []Axis
 	Include [][]KV
