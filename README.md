@@ -232,6 +232,13 @@ the [docsmith](https://github.com/viniciusdc/docsmith) template and read
 `docsmith.toml`; the Drift workflow fails when generated docs are out of
 date.
 
+**Live provider tests** run a conformance pipeline, converted by cishift,
+on real GitLab, CircleCI, Azure Pipelines and Bitbucket accounts, and check
+that every translated feature behaves as it does on GitHub Actions. They are
+started by hand from the E2E workflow, and any provider without credentials
+is skipped. `go test` covers the offline half: the pipeline must convert to
+every target without warnings. Setup is described in [e2e/README.md](e2e/README.md).
+
 Releases are cut by pushing a tag (`git tag v0.1.0 && git push --tags`):
 the release workflow runs the tests and publishes binaries with GoReleaser.
 
@@ -250,6 +257,10 @@ convert/            convert wires the providers together: detection, parsing, em
 docs/               CLI reference, lockfile and translation guides
   diagrams/         Diagram sources (TOML) for gendiagram
 docsmith.toml       Configuration for the docs generators
+e2e/                Runs the conformance pipeline on real CI providers
+  conformance/      conformance holds the pipeline that the live end-to-end tests run on…
+  internal/         Packages private to the live tests
+    runner/         runner pushes the converted conformance pipeline to real CI providers,…
 go.mod              Module github.com/viniciusdc/ci-shift
 internal/           Packages private to this module
   buildinfo/        buildinfo reports the version of the running cishift binary

@@ -1,0 +1,131 @@
+name: E2E
+
+# Runs e2e/conformance/ci.yml, converted by ci-shift, on the real providers
+# and checks every job (see e2e/README.md). Manual only. Credentials live in
+# the "e2e" environment, which pull requests from forks cannot reach; a
+# provider whose settings are missing there is reported as skipped.
+on:
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: Comma-separated providers to test
+        type: string
+        default: gitlab,circleci,azure,bitbucket
+
+permissions:
+  contents: read
+
+# The providers' throwaway repositories and E2E_SECRET variables are shared,
+# so runs never overlap; a queued run waits instead of cancelling one that
+# still has branches to clean up.
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Select providers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      providers: ${{ steps.select.outputs.providers }}
+    steps:
+      - id: select
+        env:
+          PROVIDERS: ${{ inputs.providers }}
+        run: |
+          json=""
+          IFS=',' read -ra list <<< "$PROVIDERS"
+          for p in "${list[@]}"; do
+            p="$(printf '%s' "$p" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+            case "$p" in
+              "") continue ;;
+              gitlab|circleci|azure|bitbucket) ;;
+              *) echo "::error::unknown provider '$p' (known: gitlab, circleci, azure, bitbucket)"; exit 1 ;;
+            esac
+            case ",$json," in *"\"$p\""*) continue ;; esac
+            json="${json:+$json,}\"$p\""
+          done
+          if [ -z "$json" ]; then
+            echo "::error::no providers selected"
+            exit 1
+          fi
+          echo "providers=[$json]" >> "$GITHUB_OUTPUT"
+
+  live:
+    name: ${{ matrix.provider }}
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: e2e
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJSON(needs.plan.outputs.providers) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Azure with E2E_AZURE_POOL: this machine joins that self-hosted pool
+      # as a temporary agent for the run, so jobs start at once instead of
+      # waiting for the free Microsoft-hosted agent. The running agent
+      # publishes its whole environment to Azure as capabilities, so it
+      # starts with a minimal one: the token reaches config.sh only.
+      - name: Start an Azure Pipelines agent
+        id: azure-agent
+        if: matrix.provider == 'azure' && vars.E2E_AZURE_POOL != ''
+        env:
+          AGENT_VERSION: 5.279.0
+          VSTS_AGENT_INPUT_URL: https://dev.azure.com/${{ vars.E2E_AZURE_ORG }}
+          VSTS_AGENT_INPUT_AUTH: pat
+          VSTS_AGENT_INPUT_TOKEN: ${{ secrets.E2E_AZURE_TOKEN }}
+          VSTS_AGENT_INPUT_POOL: ${{ vars.E2E_AZURE_POOL }}
+          VSTS_AGENT_INPUT_AGENT: github-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/azure-agent"
+          cd "$RUNNER_TEMP/azure-agent"
+          curl -fsSL "https://download.agent.dev.azure.com/agent/$AGENT_VERSION/vsts-agent-linux-x64-$AGENT_VERSION.tar.gz" | tar -xz
+          ./config.sh --unattended --acceptTeeEula --replace
+          env -i HOME="$HOME" USER="$USER" LANG=C.UTF-8 PATH="$PATH" nohup ./run.sh > agent.log 2>&1 &
+
+      # Each job only receives its own provider's credentials. The runner
+      # decides whether they are complete and skips the provider otherwise.
+      - name: Run the conformance pipeline
+        env:
+          PROVIDER: ${{ matrix.provider }}
+          E2E_GITLAB_TOKEN: ${{ matrix.provider == 'gitlab' && secrets.E2E_GITLAB_TOKEN || '' }}
+          E2E_GITLAB_PROJECT: ${{ matrix.provider == 'gitlab' && vars.E2E_GITLAB_PROJECT || '' }}
+          E2E_GITLAB_URL: ${{ matrix.provider == 'gitlab' && vars.E2E_GITLAB_URL || '' }}
+          E2E_BITBUCKET_TOKEN: ${{ matrix.provider == 'bitbucket' && secrets.E2E_BITBUCKET_TOKEN || '' }}
+          E2E_BITBUCKET_WORKSPACE: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_WORKSPACE || '' }}
+          E2E_BITBUCKET_REPO: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_REPO || '' }}
+          E2E_BITBUCKET_EMAIL: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_EMAIL || '' }}
+          E2E_AZURE_TOKEN: ${{ matrix.provider == 'azure' && secrets.E2E_AZURE_TOKEN || '' }}
+          E2E_AZURE_ORG: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_ORG || '' }}
+          E2E_AZURE_PROJECT: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PROJECT || '' }}
+          E2E_AZURE_REPO: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_REPO || '' }}
+          E2E_AZURE_PIPELINE: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PIPELINE || '' }}
+          E2E_AZURE_POOL: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_POOL || '' }}
+          E2E_CIRCLECI_TOKEN: ${{ matrix.provider == 'circleci' && secrets.E2E_CIRCLECI_TOKEN || '' }}
+          E2E_CIRCLECI_GH_TOKEN: ${{ matrix.provider == 'circleci' && secrets.E2E_CIRCLECI_GH_TOKEN || '' }}
+          E2E_CIRCLECI_REPO: ${{ matrix.provider == 'circleci' && vars.E2E_CIRCLECI_REPO || '' }}
+          E2E_CIRCLECI_SLUG: ${{ matrix.provider == 'circleci' && vars.E2E_CIRCLECI_SLUG || '' }}
+        run: go run ./e2e -providers "$PROVIDER" -timeout 30m
+
+      - name: Remove the Azure Pipelines agent
+        if: always() && steps.azure-agent.outcome != 'skipped'
+        working-directory: ${{ runner.temp }}/azure-agent
+        env:
+          VSTS_AGENT_INPUT_AUTH: pat
+          VSTS_AGENT_INPUT_TOKEN: ${{ secrets.E2E_AZURE_TOKEN }}
+        run: |
+          pkill -f Agent.Listener || true
+          if [ -f .agent ]; then
+            ./config.sh remove --unattended
+          fi
+          echo "::group::Agent log"
+          tail -n 200 agent.log || true
+          echo "::endgroup::"
