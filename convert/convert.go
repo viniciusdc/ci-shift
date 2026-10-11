@@ -1,5 +1,5 @@
-// Package convert wires the providers together: detection, parsing,
-// emitting and whole-file conversion.
+// Package convert wires the providers together. It detects which provider a
+// file is for, parses it and emits it for another provider.
 package convert
 
 import (

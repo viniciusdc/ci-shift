@@ -127,7 +127,7 @@ func (o *convertOpts) bind(cmd *cobra.Command) {
 	f.BoolVar(&o.strict, "strict", false, "exit 1 when the conversion produced warnings")
 	f.BoolVar(&o.check, "check", false, "check the output against the target provider's schema")
 	f.BoolVarP(&o.quiet, "quiet", "q", false, "do not print diagnostics")
-	f.StringVar(&o.lock, "lock", "", "lockfile to record the output in (default: nearest "+lockfile.Name+")")
+	f.StringVar(&o.lock, "lock", "", "lockfile to record the output in (default nearest "+lockfile.Name+")")
 	f.BoolVar(&o.noLock, "no-lock", false, "do not record the output in the lockfile")
 	f.BoolVar(&o.force, "force", false, "overwrite an output that was edited by hand")
 }

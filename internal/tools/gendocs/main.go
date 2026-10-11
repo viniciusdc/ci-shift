@@ -81,8 +81,6 @@ func main() {
 	}
 }
 
-// ----- injection ------------------------------------------------------------
-
 // inject replaces the content between the <!-- gendocs:name --> and
 // <!-- /gendocs:name --> marker lines in root/relFile.
 func inject(root, relFile, name, content string) {
@@ -147,8 +145,6 @@ func replaceSection(doc, open, end, content string) (string, error) {
 	return b.String(), nil
 }
 
-// ----- CLI reference --------------------------------------------------------
-
 // build compiles the CLI once into a temporary directory; the returned
 // cleanup removes it.
 func build(root, name, pkg string) (string, func()) {
@@ -177,7 +173,7 @@ type cmdNode struct {
 	subs  []*cmdNode
 }
 
-// helpData is what we keep from one --help page.
+// helpData holds the parts of one --help page the reference uses.
 type helpData struct {
 	long     string   // description paragraph(s) before "Usage:"
 	usages   []string // usage lines, minus the "<bin> [command]" form
@@ -196,7 +192,7 @@ var helpSkip = map[string]bool{"help": true, "completion": true}
 // discover walks the command tree by running "<bin> <path> --help".
 func discover(bin string, path []string, short string) *cmdNode {
 	args := append(append([]string{}, path...), "--help")
-	out, err := exec.Command(bin, args...).Output() // #nosec G204 -- bin is the binary we just built
+	out, err := exec.Command(bin, args...).Output() // #nosec G204 -- bin comes from build()
 	if err != nil {
 		fatalf("%s %s: %v", filepath.Base(bin), strings.Join(args, " "), err)
 	}
@@ -311,8 +307,6 @@ func dedent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// ── Flag parsing ─────────────────────────────────────────────────────────────
-
 var (
 	splitRE   = regexp.MustCompile(`\s{2,}`)
 	defaultRE = regexp.MustCompile(`\s*\(default\s+"?([^)"]*)"?\)\s*$`)
@@ -410,8 +404,6 @@ func writeFlagsTable(b *bytes.Buffer, flags []flagInfo) {
 	}
 	b.WriteByte('\n')
 }
-
-// ── CLI reference generator ───────────────────────────────────────────────────
 
 // genCLI renders the reference: the root command first, then one section per
 // top-level command. A command with subcommands gets a summary table
@@ -564,8 +556,6 @@ func anchor(name string, path []string) string {
 	return b.String()
 }
 
-// ----- Project layout -------------------------------------------------------
-
 // defaultSkip applies when [docs.layout].skip is not set.
 var defaultSkip = []string{"testdata", "vendor", "dist", "bin", "node_modules"}
 
@@ -609,7 +599,7 @@ func genLayout(root string, rootFiles, skip []string, maxDepth int, notes map[st
 			return nil
 		}
 		if !d.IsDir() {
-			// Only the configured root files; everything else is summarised
+			// Only the configured root files; everything else is summarized
 			// by its directory.
 			if !strings.Contains(rel, "/") && keepFile[name] {
 				entries = append(entries, entry{rel: rel, desc: notes[rel]})
@@ -711,8 +701,6 @@ func synopsis(text, pkg string) string {
 	}
 	return joined
 }
-
-// ----- utilities ------------------------------------------------------------
 
 const configFile = "docsmith.toml"
 

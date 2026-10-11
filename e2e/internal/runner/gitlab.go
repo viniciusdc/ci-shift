@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// GitLab runs the pipeline in a GitLab project, authenticated with a
-// project access token.
+// GitLab runs the pipeline in a GitLab project, authenticated with an
+// access token that has the api scope.
 type GitLab struct {
 	BaseURL string // https://gitlab.com
 	Project string // namespace/project
@@ -42,7 +42,7 @@ func (g *GitLab) client() *api {
 // projectPath is the URL-encoded project path used as :id.
 func (g *GitLab) projectPath() string { return "/projects/" + url.PathEscape(g.Project) }
 
-// Remote implements Provider. Project access tokens accept any non-blank
+// Remote implements Provider. GitLab access tokens accept any non-blank
 // user name over HTTPS.
 func (g *GitLab) Remote() Remote {
 	return Remote{URL: strings.TrimRight(g.BaseURL, "/") + "/" + g.Project + ".git", Username: "oauth2", Password: g.Token}

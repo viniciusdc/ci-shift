@@ -18,7 +18,7 @@ cishift <file|-> --to <provider> [flags]
 | `--check` |  | check the output against the target provider's schema |
 | `--force` |  | overwrite an output that was edited by hand |
 | `-f/--from FROM` |  | source provider (detected from the file when omitted) |
-| `--lock LOCK` |  | lockfile to record the output in (default: nearest .cishift.lock) |
+| `--lock LOCK` | `nearest .cishift.lock` | lockfile to record the output in |
 | `--no-header` |  | omit the review comment header |
 | `--no-lock` |  | do not record the output in the lockfile |
 | `-o/--output OUTPUT` | `stdout` | output file |
@@ -134,10 +134,10 @@ Regenerate every pipeline file recorded in the lockfile
 cishift sync [--force] [--lock LOCK]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--force` | overwrite outputs that were edited by hand |
-| `--lock LOCK` | lockfile to sync (default: nearest .cishift.lock) |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--force` |  | overwrite outputs that were edited by hand |
+| `--lock LOCK` | `nearest .cishift.lock` | lockfile to sync |
 
 ---
 
@@ -152,9 +152,9 @@ differently. Run 'cishift sync' to regenerate.
 cishift verify [--lock LOCK]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--lock LOCK` | lockfile to verify (default: nearest .cishift.lock) |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--lock LOCK` | `nearest .cishift.lock` | lockfile to verify |
 
 ---
 
@@ -168,5 +168,5 @@ cishift version [--check]
 
 | Flag | Description |
 |------|-------------|
-| `--check` | check GitHub for a newer release (the only command that goes online) |
+| `--check` | check GitHub for a newer release |
 <!-- /gendocs:cli -->

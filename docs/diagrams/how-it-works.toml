@@ -3,7 +3,7 @@
 # internal/tools/gendiagram into docs/assets/diagrams/.
 #
 # Explicit layout: providers sit 40px apart on both sides; the three stages
-# share the centre row (y=150), level with the middle provider.
+# share the center row (y=150), level with the middle provider.
 
 title  = "ci-shift — one pipeline model between five providers"
 width  = 850

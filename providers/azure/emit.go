@@ -196,9 +196,6 @@ func (e *emitter) collectServices() {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Triggers
-
 // branchFilters converts glob patterns into Azure filters, dropping the
 // ones Azure cannot express.
 func (e *emitter) branchFilters(pats []string, path string) []string {
@@ -288,9 +285,6 @@ func (e *emitter) triggers(root *yamlx.Map) {
 		e.d.Infof("trigger", "manual runs are always available in Azure Pipelines")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Structure
 
 func (e *emitter) stages() ([]any, error) {
 	names, assign, err := e.p.StageNames()
@@ -535,9 +529,6 @@ func (e *emitter) matrix(j *ir.Job, path string) *yamlx.Map {
 	return legs
 }
 
-// ---------------------------------------------------------------------------
-// Steps
-
 // tail appends the settings shared by every step. Tasks take typed values;
 // shortcut steps (script, checkout, publish...) take strings.
 func (e *emitter) tail(m *yamlx.Map, st *ir.Step, cond string, task bool, env *yamlx.Map) {
@@ -675,7 +666,7 @@ func (e *emitter) run(j *ir.Job, st *ir.Step, name, cond string, env *yamlx.Map,
 	if kind == scriptPOSIX {
 		body = e.exportedRefs(j, body)
 		// Azure runs scripts without errexit; keep the IR's
-		// stop-at-first-error semantics (see errexit.go).
+		// stop-at-first-error semantics (see withErrexit).
 		body = withErrexit(body, key == "bash")
 	}
 	m := yamlx.NewMap().Set(key, e.toAZ(body, kind, path)).SetIf("displayName", name)

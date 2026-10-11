@@ -1,5 +1,11 @@
-// Command updateschemas refreshes the schema snapshots embedded in the
-// schema package from their upstream URLs.
+// Package main refreshes the schema snapshots built into cishift. It
+// downloads each provider's schema from its upstream URL into
+// schema/snapshots.
+//
+// Run from the repository root via:
+//
+//	go run ./internal/tools/updateschemas
+//	make schemas
 package main
 
 import (

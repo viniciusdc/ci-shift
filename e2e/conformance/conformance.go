@@ -1,5 +1,5 @@
-// Package conformance holds the pipeline that the live end-to-end tests run
-// on every provider, and converts it for them.
+// Package conformance holds the pipeline the live tests run on every provider.
+// It also converts the pipeline for each of them.
 //
 // ci.yml is a GitHub Actions workflow whose jobs each exercise one
 // translated feature and fail when it was mistranslated. It must convert to

@@ -33,7 +33,7 @@ func TestPostProcess(t *testing.T) {
 
 	for _, want := range []string{
 		`<svg width="760.00" height="136.00"`,               // canvas grew by the footer
-		`width="760.00" height="136.00" fill="#161b22" rx=`, // window bg recoloured and stretched
+		`width="760.00" height="136.00" fill="#161b22" rx=`, // window bg recolored and stretched
 		`#52C12B"/><text x="380.00"`,                        // title after the last light
 		">my demo</text>",
 		"✓ CI tested · my-demo.txtar",

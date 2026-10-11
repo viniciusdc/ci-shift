@@ -13,7 +13,7 @@ generated:
     source: .gitlab-ci.yml
     from: gitlab
     to: github
-    cishift: v0.4.0
+    cishift: v0.1.0
     schema: github@sha256:d10c9f4656e1
     source_sha256: sha256:e786…
     output_sha256: sha256:f672…
@@ -37,9 +37,6 @@ cishift sync     # regenerate them all (add --force to overwrite hand edits)
 - its **source changed**;
 - the installed cishift would now **generate it differently**, e.g. after an
   upgrade.
-
-That makes `cishift verify` a good CI step when a repository keeps pipelines
-for several providers generated from one source.
 
 ## Hand edits
 

@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 # The providers' throwaway repositories and E2E_SECRET variables are shared,
-# so runs never overlap; a queued run waits instead of cancelling one that
+# so runs never overlap; a queued run waits instead of canceling one that
 # still has branches to clean up.
 concurrency:
   group: e2e

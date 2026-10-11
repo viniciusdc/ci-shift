@@ -34,8 +34,7 @@ func newCircleCI(env func(string) string) (*CircleCI, []string) {
 		Token:       env("E2E_CIRCLECI_TOKEN"),
 	}
 	// The slug is not derived from the repository: projects created through
-	// the GitHub App, the default today, get circleci/<org-id>/<project-id>
-	// rather than gh/<owner>/<name>.
+	// the GitHub App get circleci/<org-id>/<project-id>, not gh/<owner>/<name>.
 	return c, missing(map[string]string{
 		"E2E_CIRCLECI_REPO":     c.Repo,
 		"E2E_CIRCLECI_SLUG":     c.Slug,

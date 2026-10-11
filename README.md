@@ -14,8 +14,7 @@
 
 </div>
 
-`cishift` translates pipeline configurations from one CI provider to another
-and checks them against each provider's official JSON schema.
+The name column is what `--from`, `--to` and `--provider` take:
 
 | Provider | Name | Default file |
 |---|---|---|
@@ -84,8 +83,8 @@ as aliases, for scripts that prefer explicit verbs.
 Converted files start with a comment header naming the source. It also lists
 every **warning**: anything ci-shift dropped or approximated, such as a
 GitHub Marketplace action with no equivalent, or a GitLab `rules:changes`.
-Warnings also go to stderr. `--strict` turns them into a non-zero exit code,
-which is useful in CI:
+Warnings also go to stderr, and `--strict` turns them into a non-zero exit
+code:
 
 <!-- gendocs:example:warnings-and-strict -->
 <div align="center">
@@ -154,9 +153,9 @@ you pass `--force`:
 </div>
 <!-- /gendocs:example:lockfile -->
 
-That makes `cishift verify` a good CI step when a repository keeps pipelines
-for several providers generated from one source. `--no-lock` skips recording
-a file. The lockfile format and the lookup rules are in
+When a repository keeps pipelines for several providers generated from one
+source, run `cishift verify` in CI to catch drift. `--no-lock` skips
+recording a file. The lockfile format and the lookup rules are in
 [docs/lockfile.md](docs/lockfile.md).
 
 ## Schemas
@@ -172,8 +171,9 @@ cishift schemas reset    # go back to the built-in snapshots
 cishift check --embedded file.yml   # ignore downloaded schemas for one check
 ```
 
-Downloaded schemas are only used after an explicit `update`. No other
-command goes online, except `version --check`.
+Downloaded schemas are only used once `schemas update` or `check --latest`
+has stored them. Those two and `version --check` are the only commands that
+go online.
 
 ## What gets translated
 
@@ -184,14 +184,8 @@ including secrets and well-known CI variables such as `$CI_COMMIT_SHA` ⇄
 but never defines are treated as secrets. The full table, with how each
 concept maps between providers, is in [docs/translation.md](docs/translation.md).
 
-### Known limits
-
-- Includes and templates (`include:`, Azure `template:`, CircleCI orbs) are
-  not resolved. Convert the referenced files separately.
-- Provider-specific expressions that ci-shift cannot parse (e.g. GitHub
-  `contains(...)` conditions or job outputs) are reported and dropped.
-- Schedules on GitLab and Bitbucket live in project settings, so ci-shift
-  tells you which cron expression to create there.
+What ci-shift does not translate, such as includes and templates, is listed
+under [Known limits](docs/translation.md#known-limits).
 
 ## Library use
 
@@ -253,26 +247,26 @@ and adding its schema URL to `schema/schema.go`.
 Makefile            Build, test, lint, schema and docs targets
 cmd/                Executable entry points
   cishift/          cishift translates CI/CD pipelines between providers
-convert/            convert wires the providers together: detection, parsing, emitting and…
+convert/            convert wires the providers together
 docs/               CLI reference, lockfile and translation guides
   diagrams/         Diagram sources (TOML) for gendiagram
 docsmith.toml       Configuration for the docs generators
 e2e/                Runs the conformance pipeline on real CI providers
-  conformance/      conformance holds the pipeline that the live end-to-end tests run on…
+  conformance/      conformance holds the pipeline the live tests run on every provider
   internal/         Packages private to the live tests
-    runner/         runner pushes the converted conformance pipeline to real CI providers,…
+    runner/         runner pushes the conformance pipeline to real CI providers
 go.mod              Module github.com/viniciusdc/ci-shift
 internal/           Packages private to this module
   buildinfo/        buildinfo reports the version of the running cishift binary
   cli/              cli implements the cishift command line
-  lockfile/         lockfile records which pipeline files cishift generated, from what, and…
+  lockfile/         lockfile records which pipeline files cishift generated and from what
   tools/            Maintenance commands, run through make
     genbanner/      Generates the README banner SVGs from docsmith.toml
     gendiagram/     Generates architecture diagram SVGs from TOML definitions
     gendocs/        Generates the CLI reference and project layout sections of the docs
     genexamples/    Generates executable documentation snippets
-    updateschemas/  updateschemas refreshes the schema snapshots embedded in the schema…
-  yamlx/            yamlx provides small helpers for reading YAML documents in an…
+    updateschemas/  Refreshes the schema snapshots built into cishift
+  yamlx/            yamlx reads and writes YAML documents, keeping the order of keys
 ir/                 ir defines ci-shift's provider-neutral pipeline model
 providers/          One parser + emitter per CI provider
   azure/            azure converts Azure Pipelines YAML definitions to and from the IR
@@ -280,7 +274,7 @@ providers/          One parser + emitter per CI provider
   circleci/         circleci converts CircleCI 2.1 configurations to and from the IR
   github/           github converts GitHub Actions workflows to and from the IR
   gitlab/           gitlab converts GitLab CI/CD configurations to and from the IR
-schema/             schema validates CI configuration files against the providers'…
+schema/             schema validates pipeline files against the providers' JSON schemas
   snapshots/        Provider JSON schemas built into the binary
 ```
 <!-- /gendocs:layout -->

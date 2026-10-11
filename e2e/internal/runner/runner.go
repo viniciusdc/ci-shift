@@ -1,5 +1,5 @@
-// Package runner pushes the converted conformance pipeline to real CI
-// providers, waits for the runs and checks every job's outcome.
+// Package runner pushes the conformance pipeline to real CI providers. It
+// waits for each run and checks every job's outcome.
 //
 // Each provider implements Provider on top of its REST API. A provider
 // whose configuration (environment variables) is incomplete is skipped,

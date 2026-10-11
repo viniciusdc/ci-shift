@@ -1,5 +1,4 @@
-// Package yamlx provides small helpers for reading YAML documents in an
-// order-preserving way and for writing ordered YAML back out.
+// Package yamlx reads and writes YAML documents, keeping the order of keys.
 package yamlx
 
 import (

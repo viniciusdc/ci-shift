@@ -1,8 +1,7 @@
 # What gets translated
 
-Every provider has a parser into ci-shift's shared pipeline model (the `ir`
-package) and an emitter back out of it, so every provider converts to and
-from every other one. This page lists what that model carries.
+Every provider parses into ci-shift's shared pipeline model (the `ir`
+package) and emits from it. This page lists what that model carries.
 
 | Concept | Notes |
 |---|---|
@@ -27,16 +26,9 @@ expose secrets automatically.
 
 ## Warnings and placeholders
 
-Converted files start with a comment header naming the source. It also lists
-every **warning**: anything ci-shift dropped or approximated, such as a
-GitHub Marketplace action with no equivalent, or a GitLab `rules:changes`.
-Warnings also go to stderr. `--strict` turns them into a non-zero exit code,
-which is useful in CI; `--no-header` omits the header.
-
-Steps that cannot be translated, such as third-party GitHub actions,
-CircleCI orbs, Azure tasks or Bitbucket pipes, become a **failing
-placeholder step**. A converted pipeline therefore never silently skips
-work.
+The review header, the warnings it lists and the failing placeholder steps
+are described under [Usage](../README.md#usage) in the README; `--no-header`
+omits the header.
 
 ## Known limits
 

@@ -16,10 +16,10 @@ import (
 const azureAPIVersion = "7.1"
 
 // Azure runs the pipeline in an Azure Repos repository, authenticated with
-// a personal access token. The YAML pipeline definition is looked up by
-// name and created when missing. With Pool set, every job runs on that
-// self-hosted agent pool instead of the Microsoft-hosted one the
-// conversion picked.
+// a personal access token or a Microsoft Entra token (see entraToken). The
+// YAML pipeline definition is looked up by name and created when missing.
+// With Pool set, every job runs on that self-hosted agent pool instead of
+// the Microsoft-hosted one the conversion picked.
 type Azure struct {
 	BaseURL  string // https://dev.azure.com
 	Org      string

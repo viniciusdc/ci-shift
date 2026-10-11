@@ -7,8 +7,8 @@ import (
 )
 
 // Summary writes the results as Markdown: one overview table, then the
-// per-job checks of every provider that ran. It reads well in a terminal
-// and renders as tables in $GITHUB_STEP_SUMMARY.
+// per-job checks of every provider that ran. Plain Markdown, for the
+// terminal and $GITHUB_STEP_SUMMARY.
 func Summary(w io.Writer, results []Result) {
 	fmt.Fprintln(w, "## ci-shift live provider tests")
 	fmt.Fprintln(w)

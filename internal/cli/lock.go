@@ -136,7 +136,7 @@ differently. Run 'cishift sync' to regenerate.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&lock, "lock", "", "lockfile to verify (default: nearest "+lockfile.Name+")")
+	cmd.Flags().StringVar(&lock, "lock", "", "lockfile to verify (default nearest "+lockfile.Name+")")
 	return cmd
 }
 
@@ -220,7 +220,7 @@ func newSyncCmd(stdout, stderr io.Writer) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&lock, "lock", "", "lockfile to sync (default: nearest "+lockfile.Name+")")
+	cmd.Flags().StringVar(&lock, "lock", "", "lockfile to sync (default nearest "+lockfile.Name+")")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite outputs that were edited by hand")
 	return cmd
 }
