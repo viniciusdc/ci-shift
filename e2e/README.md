@@ -234,23 +234,31 @@ About 30 minutes.
       application identities only exist there.
    2. Create a user-assigned managed identity in an Azure subscription of
       that directory (free), and add a federated credential that trusts
-      GitHub for this repository's `e2e` environment only:
+      GitHub for this repository's `e2e` environment only. The subject must
+      match the token exactly, and repositories with GitHub's ID-based
+      subjects get `repo:<owner>@<id>/<repo>@<id>:...`, so read the prefix
+      from the API:
 
       ```bash
+      prefix=$(gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix)
       az identity create -g <resource-group> -n ci-shift-e2e-github
       az identity federated-credential create -g <resource-group> \
         --identity-name ci-shift-e2e-github -n github-e2e-environment \
         --issuer https://token.actions.githubusercontent.com \
-        --subject repo:<owner>/<repo>:environment:e2e \
+        --subject "$prefix:environment:e2e" \
         --audiences api://AzureADTokenExchange
       ```
 
    3. **Organization settings › Users › Add users**: the identity, with
       **Basic** access (Azure Repos needs it; the first five Basic users of
       an organization are free) and the project's **Contributors** group.
-   4. With the pool from step 3: **Organization settings › Agent pools ›
+   4. If the pipeline already exists (step 4), open it, choose **Manage
+      security** from its menu, and allow **Edit build pipeline** for the
+      identity: the runner writes `E2E_SECRET` into the pipeline.
+   5. With the pool from step 3: **Organization settings › Agent pools ›
       `ci-shift-e2e` › Security**, add the identity as **Administrator**,
-      which registering the temporary agent needs.
+      which registering the temporary agent needs. Add the identity itself,
+      not the project's *Build Service* account or a group.
 
    Without a directory, use a personal access token instead: **User
    settings › Personal access tokens › New Token**, scoped to this
