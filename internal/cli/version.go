@@ -46,7 +46,7 @@ func newVersionCmd(stdout io.Writer) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&check, "check", false, "check GitHub for a newer release (the only command that goes online)")
+	cmd.Flags().BoolVar(&check, "check", false, "check GitHub for a newer release")
 	return cmd
 }
 
