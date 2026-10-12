@@ -62,9 +62,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    # The Azure identity and organization are secrets so that they are masked
-    # in the public logs; secrets can't be tested in a step's if:, so the
-    # client ID is also exposed here, to the Azure job only.
+    # The Azure identity is a secret so that it is masked in the public logs;
+    # secrets can't be tested in a step's if:, so the client ID is also
+    # exposed here, to the Azure job only.
     env:
       AZURE_OIDC_CLIENT_ID: ${{ matrix.provider == 'azure' && secrets.E2E_AZURE_CLIENT_ID || '' }}
     strategy:
@@ -109,7 +109,7 @@ jobs:
         if: matrix.provider == 'azure' && vars.E2E_AZURE_POOL != ''
         env:
           AGENT_VERSION: 5.279.0
-          VSTS_AGENT_INPUT_URL: https://dev.azure.com/${{ secrets.E2E_AZURE_ORG }}
+          VSTS_AGENT_INPUT_URL: https://dev.azure.com/${{ vars.E2E_AZURE_ORG }}
           VSTS_AGENT_INPUT_AUTH: pat
           VSTS_AGENT_INPUT_TOKEN: ${{ steps.azure-token.outputs.token || secrets.E2E_AZURE_TOKEN }}
           VSTS_AGENT_INPUT_POOL: ${{ vars.E2E_AZURE_POOL }}
@@ -134,7 +134,7 @@ jobs:
           E2E_BITBUCKET_REPO: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_REPO || '' }}
           E2E_BITBUCKET_EMAIL: ${{ matrix.provider == 'bitbucket' && vars.E2E_BITBUCKET_EMAIL || '' }}
           E2E_AZURE_TOKEN: ${{ matrix.provider == 'azure' && (steps.azure-token.outputs.token || secrets.E2E_AZURE_TOKEN) || '' }}
-          E2E_AZURE_ORG: ${{ matrix.provider == 'azure' && secrets.E2E_AZURE_ORG || '' }}
+          E2E_AZURE_ORG: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_ORG || '' }}
           E2E_AZURE_PROJECT: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PROJECT || '' }}
           E2E_AZURE_REPO: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_REPO || '' }}
           E2E_AZURE_PIPELINE: ${{ matrix.provider == 'azure' && vars.E2E_AZURE_PIPELINE || '' }}
