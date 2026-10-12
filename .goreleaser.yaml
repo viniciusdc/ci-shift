@@ -43,3 +43,8 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+
+release:
+  # A tag such as v0.1.0-rc.1 becomes a pre-release, which GitHub never
+  # marks as latest, so `cishift version --check` does not offer it.
+  prerelease: auto
