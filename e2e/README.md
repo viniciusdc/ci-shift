@@ -186,15 +186,16 @@ the provider through its API and masks it.
 | secret | `E2E_AZURE_CLIENT_ID` | with OIDC: the identity's client ID |
 | secret | `E2E_AZURE_TENANT_ID` | with OIDC: the directory (tenant) ID |
 | secret | `E2E_AZURE_TOKEN` | without OIDC: the PAT |
-| secret | `E2E_AZURE_ORG` | organization name |
+| variable | `E2E_AZURE_ORG` | organization name |
 | variable | `E2E_AZURE_PROJECT` | project name |
 | variable | `E2E_AZURE_REPO` | repository name |
 | variable | `E2E_AZURE_POOL` | optional; the self-hosted pool from step 3 (`ci-shift-e2e`) |
 | variable | `E2E_AZURE_PIPELINE` | optional; pipeline name, default `ci-shift-e2e` |
 
-The client ID, tenant ID and organization are not credentials, but as
-secrets they are masked in the workflow logs, which are public on a public
-repository.
+The client and tenant IDs are not credentials, but as secrets they are
+masked in the workflow logs, which are public on a public repository. Keep
+the organization a variable: GitHub masks a secret everywhere, including in
+the run links of the summary, which then fail to open.
 
 With `E2E_AZURE_POOL` set, the runner points every `pool:` of the converted
 pipeline at that pool, the only change it makes to the conversion. To use
