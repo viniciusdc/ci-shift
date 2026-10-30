@@ -15,9 +15,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Release with the newest Go and its security fixes; go.mod only sets
+      # the oldest Go that builds ci-shift. go-licenses, run by GoReleaser,
+      # needs Go 1.23: on an older Go it is built by a downloaded toolchain
+      # and then fails to recognize the standard library.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: Test
         run: go test ./...
