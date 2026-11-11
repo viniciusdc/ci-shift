@@ -62,6 +62,14 @@ The cobra commands are in `internal/cli`; `cmd/cishift` is the entry point.
   be detected as the target, and come out unchanged when parsed and
   emitted again. After an intended change to an output, run `make golden`
   and review the diff.
+- The corpus test (`convert/corpus_test.go`) runs real pipelines from
+  public projects, in `testdata/corpus/<provider>/`, through detection,
+  `check` and a conversion to every other provider. It records each
+  outcome, failures included, in `testdata/corpus/results.txt` and fails
+  when one changes. A fix that changes an outcome updates the file with
+  `make golden`. New corpus files must be under a permissive license,
+  unmodified, pinned to a commit and listed in `testdata/corpus/README.md`
+  with their license in `testdata/corpus/licenses/`.
 - Provider tests (`providers/<name>/*_test.go`) cover parsing and emitting
   details.
 - README examples are the testscripts in `testdata/examples/*.txtar`, run
@@ -78,9 +86,9 @@ The cobra commands are in `internal/cli`; `cmd/cishift` is the entry point.
 ## Rules
 
 - Do not edit generated content by hand: the sections between
-  `<!-- gendocs:... -->` markers, `docs/CLI.md`, `docs/assets/` and
-  `testdata/golden/`. Regenerate it with `make docs`, `make generate` or
-  `make golden`.
+  `<!-- gendocs:... -->` markers, `docs/CLI.md`, `docs/assets/`,
+  `testdata/golden/` and `testdata/corpus/results.txt`. Regenerate it with
+  `make docs`, `make generate` or `make golden`.
 - `main` only takes pull requests, and they need the `test`, `lint` and
   `Generated docs are up to date` checks. The last one reruns the
   generators and fails on any difference, so commit what they produce.
@@ -123,8 +131,8 @@ Every flag and example: [docs/CLI.md](docs/CLI.md).
 | `make clean` | Remove the built binary. |
 | `make fmt` | Format the Go code. |
 | `make lint` | Run golangci-lint (make install-tools installs it). |
-| `make test` | Run the Go tests, including the golden and README example tests. |
-| `make golden` | Regenerate golden conversion outputs after an intentional change. |
+| `make test` | Run the Go tests, including the golden, corpus and README example tests. |
+| `make golden` | Regenerate the golden outputs and the corpus results after an intentional change. |
 | `make install` | Build and copy cishift to INSTALL_DIR, ~/.local/bin by default. |
 | `make uninstall` | Remove cishift from INSTALL_DIR. |
 | `make install-tools` | Install golangci-lint, and freeze, which renders the README examples. |

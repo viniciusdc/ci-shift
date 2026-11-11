@@ -25,7 +25,7 @@ fmt:
 lint:
 	golangci-lint run ./...
 
-# Run the Go tests, including the golden and README example tests.
+# Run the Go tests, including the golden, corpus and README example tests.
 test:
 	go test ./...
 
