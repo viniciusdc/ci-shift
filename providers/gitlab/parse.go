@@ -51,6 +51,9 @@ func (Provider) Parse(data []byte, d *ir.Diagnostics) (*ir.Pipeline, error) {
 	if yamlx.Has(root, "include") {
 		d.Warnf("include", "included files are not resolved; convert them separately and merge the result")
 	}
+	if yamlx.Has(root, "spec") {
+		d.Warnf("spec", "files with a spec: header are not supported yet; only the header document was read")
+	}
 
 	// Legacy globals act like default: entries.
 	ps.defs = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}

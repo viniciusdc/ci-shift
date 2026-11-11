@@ -152,3 +152,12 @@ func TestGetAliases(t *testing.T) {
 		}
 	}
 }
+
+func TestConvertNoJobs(t *testing.T) {
+	src, _ := Get("gitlab")
+	dst, _ := Get("github")
+	_, err := Convert([]byte("include:\n  - local: ci/jobs.yml\n"), src, dst, Options{})
+	if err == nil || !strings.Contains(err.Error(), "gitlab: no jobs to convert") || !strings.Contains(err.Error(), "included files are not resolved") {
+		t.Fatalf("err = %v", err)
+	}
+}
