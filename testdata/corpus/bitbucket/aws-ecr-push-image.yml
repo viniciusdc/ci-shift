@@ -1,0 +1,119 @@
+image:
+  name: python:3.10
+
+
+setup: &setup
+  step:
+    name: Setup testing resources
+    script:
+      - STACK_NAME="bbci-pipes-test-infrastructure-ecr-${BITBUCKET_BUILD_NUMBER}"
+      - REPOSITORY="test/bbci-pipes-test-ecr-${BITBUCKET_BUILD_NUMBER}"
+      - pipe: atlassian/aws-cloudformation-deploy:0.20.0
+        variables:
+          AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+          AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+          AWS_DEFAULT_REGION: "us-east-1"
+          STACK_NAME: ${STACK_NAME}
+          TEMPLATE: "./test/CloudformationStackTemplate_base_ecr.yml"
+          CAPABILITIES: ['CAPABILITY_IAM']
+          WAIT: 'true'
+          STACK_PARAMETERS: >
+            [{
+              "ParameterKey": "ECSUser",
+              "ParameterValue": "${ECSUser}"
+            },
+            {
+              "ParameterKey": "REPOSITORY",
+              "ParameterValue": "${REPOSITORY}"
+            }]
+      - pip install awscli
+      - REPOSITORY_PUBLIC="bbci-pipes-test-ecr-public-${BITBUCKET_BUILD_NUMBER}"
+      - REPOSITORY_URI=`aws ecr-public create-repository --repository-name ${REPOSITORY_PUBLIC} --query 'repository.repositoryUri' --output text`
+      - echo "export REPOSITORY_URI=$REPOSITORY_URI" >> set_env.sh
+    artifacts: # define the artifacts to be passed to each future step
+      - set_env.sh
+
+test: &test
+  parallel:
+    - step:
+        name: Test
+        oidc: true
+        caches:
+          - pip
+        script:
+          - cat set_env.sh
+          - source set_env.sh
+          - pip install -r test/requirements.txt
+          - pytest -p no:cacheprovider test/test_unit.py --capture=no --verbose
+          - pytest test/test.py --verbose --capture=no
+          - flake8 --ignore E501,E125
+        after-script:
+          - pip install awscli
+          - STACK_NAME="bbci-pipes-test-infrastructure-ecr-${BITBUCKET_BUILD_NUMBER}"
+          - STACK_NAME_PUBLIC="bbci-pipes-test-infrastructure-ecr-public-${BITBUCKET_BUILD_NUMBER}"
+          - REPOSITORY="test/bbci-pipes-test-ecr-${BITBUCKET_BUILD_NUMBER}"
+          - REPOSITORY_PUBLIC="bbci-pipes-test-ecr-public-${BITBUCKET_BUILD_NUMBER}"
+          - aws --region "us-east-1" ecr delete-repository --repository-name ${REPOSITORY} --force
+          - aws --region "us-east-1" ecr-public delete-repository --repository-name ${REPOSITORY_PUBLIC} --force
+          - aws --region "us-east-1" cloudformation delete-stack --stack-name ${STACK_NAME}
+          - aws --region "us-east-1" cloudformation delete-stack --stack-name ${STACK_NAME_PUBLIC}
+        services:
+        - docker
+    - step:
+        name: Lint the Dockerfile
+        image: hadolint/hadolint:latest-debian
+        script:
+          - hadolint Dockerfile
+    - step:
+        name: Security Scan
+        script:
+          # Run a security scan for sensitive data.
+          # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+          - pipe: atlassian/git-secrets-scan:3.1.0
+
+release-dev: &release-dev
+  step:
+    name: Release development version
+    trigger: manual
+    script:
+      - pip install semversioner
+      - VERSION=$(semversioner current-version).${BITBUCKET_BUILD_NUMBER}-dev
+      - pipe: atlassian/bitbucket-pipe-release:5.8.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          REGISTRY_URL: docker-public.packages.atlassian.com
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          GIT_PUSH: 'false'
+          VERSION: ${VERSION}
+    services:
+      - docker
+
+
+push: &push
+  step:
+    name: Push and Tag
+    script:
+      - pipe: atlassian/bitbucket-pipe-release:5.8.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          REGISTRY_URL: docker-public.packages.atlassian.com
+    services:
+      - docker
+
+
+
+pipelines:
+  default:
+  - <<: *setup
+  - <<: *test
+  - <<: *release-dev
+  branches:
+    master:
+    - <<: *setup
+    - <<: *test
+    - <<: *push

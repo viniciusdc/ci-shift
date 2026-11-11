@@ -4,6 +4,9 @@ Copyright 2025-2026 Vinicius Cerutti
 This product embeds CI/CD configuration schemas published by third
 parties. Their sources and licenses are listed in schema/snapshots/README.md.
 
+The test corpus in testdata/corpus holds pipeline files from other projects;
+their sources, licenses and notices are listed in testdata/corpus/README.md.
+
 The GitHub workflow schema comes from JSON Schema Store, whose notice is:
 
   JSON Schema Store

@@ -23,9 +23,9 @@ lint:
 test:
 	go test ./...
 
-# Regenerate golden conversion outputs after an intentional change.
+# Regenerate the golden outputs and the corpus results after an intentional change.
 golden:
-	go test ./convert/ -run TestGolden -update
+	go test ./convert/ -run 'TestGolden|TestCorpus' -update
 
 install: build
 	mkdir -p $(INSTALL_DIR)

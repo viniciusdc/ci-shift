@@ -1,0 +1,70 @@
+image:
+  name: python:3.10
+
+
+test: &test
+  parallel:
+    - step:
+        name: Test
+        script:
+          - pip install -r test/requirements.txt
+          - python -m pytest -p no:cacheprovider test/test_unit.py --verbose
+          - flake8 --ignore E501,E125
+        services:
+          - docker
+    - step:
+        name: Lint the Dockerfile
+        image: hadolint/hadolint:latest-debian
+        script:
+          - hadolint Dockerfile
+    - step:
+        name: Security Scan
+        script:
+          # Run a security scan for sensitive data.
+          # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+          - pipe: atlassian/git-secrets-scan:1.2.1
+
+
+release-dev: &release-dev
+  step:
+    name: Release development version
+    trigger: manual
+    script:
+      - pip install semversioner
+      - VERSION=$(semversioner current-version).${BITBUCKET_BUILD_NUMBER}-dev
+      - pipe: atlassian/bitbucket-pipe-release:5.7.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          REGISTRY_URL: docker-public.packages.atlassian.com
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          GIT_PUSH: 'false'
+          VERSION: ${VERSION}
+    services:
+      - docker
+
+
+push: &push
+  step:
+    name: Push and Tag
+    script:
+      - pipe: atlassian/bitbucket-pipe-release:5.7.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          REGISTRY_URL: docker-public.packages.atlassian.com
+    services:
+      - docker
+
+
+pipelines:
+  default:
+  - <<: *test
+  - <<: *release-dev
+  branches:
+    master:
+    - <<: *test
+    - <<: *push

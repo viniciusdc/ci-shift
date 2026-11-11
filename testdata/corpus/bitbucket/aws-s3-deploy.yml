@@ -1,0 +1,102 @@
+image:
+  name: python:3.11
+
+
+setup: &setup
+  step:
+    name: Setup testing resources
+    script:
+      - STACK_NAME="bbci-pipes-test-infrastructure-s3-${BITBUCKET_BUILD_NUMBER}"
+      - S3_BUCKET="bbci-pipes-test-s3-${BITBUCKET_BUILD_NUMBER}"
+      - pipe: atlassian/aws-cloudformation-deploy:0.20.1
+        variables:
+          AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+          AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+          AWS_DEFAULT_REGION: "us-east-1"
+          STACK_NAME: ${STACK_NAME}
+          TEMPLATE: "./test/CloudformationStackTemplate_base_s3.yml"
+          CAPABILITIES: ['CAPABILITY_IAM']
+          WAIT: 'true'
+          STACK_PARAMETERS: >
+            [{
+              "ParameterKey": "BucketName",
+              "ParameterValue": ${S3_BUCKET}
+            }]
+
+
+test: &test
+  parallel:
+    - step:
+        name: Test
+        oidc: true
+        script:
+          - pip install -r test/requirements.txt
+          - flake8 --ignore E501,E125
+          - pytest test/test.py --verbose --capture=no
+        after-script:
+          - pip install awscli==1.18.188
+          - STACK_NAME="bbci-pipes-test-infrastructure-s3-${BITBUCKET_BUILD_NUMBER}"
+          - S3_BUCKET="bbci-pipes-test-s3-${BITBUCKET_BUILD_NUMBER}"
+          - aws --region="us-east-1" s3 rb s3://${S3_BUCKET} --force
+          - aws --region="us-east-1" cloudformation delete-stack --stack-name ${STACK_NAME}
+        services:
+          - docker
+    - step:
+        name: Lint the Dockerfile
+        image: hadolint/hadolint:latest-debian
+        script:
+          - hadolint Dockerfile
+    - step:
+        name: Security Scan
+        script:
+          # Run a security scan for sensitive data.
+          # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+          - pipe: atlassian/git-secrets-scan:3.1.0
+
+
+release-dev: &release-dev
+  step:
+    name: Release development version
+    trigger: manual
+    image: python:3.10
+    script:
+      - pip install semversioner
+      - VERSION=$(semversioner current-version).${BITBUCKET_BUILD_NUMBER}-dev
+      - pipe: atlassian/bitbucket-pipe-release:5.8.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          REGISTRY_URL: docker-public.packages.atlassian.com
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          GIT_PUSH: 'false'
+          VERSION: ${VERSION}
+    services:
+      - docker
+
+
+push: &push
+  step:
+    name: Push and Tag
+    script:
+      - pipe: atlassian/bitbucket-pipe-release:5.8.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          REGISTRY_URL: docker-public.packages.atlassian.com
+    services:
+      - docker
+
+
+pipelines:
+  default:
+  - <<: *setup
+  - <<: *test
+  - <<: *release-dev
+  branches:
+    master:
+    - <<: *setup
+    - <<: *test
+    - <<: *push
