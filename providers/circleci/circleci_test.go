@@ -532,3 +532,43 @@ workflows:
 		t.Errorf("unexpected output:\n%s", out)
 	}
 }
+
+// A workflow can run one job twice, once under a name; each entry is its own
+// job, and requires reaches the unnamed one by its job key.
+func TestParseJobRunTwice(t *testing.T) {
+	cfg := `
+version: 2.1
+jobs:
+  deploy:
+    docker: [{image: cimg/base:stable}]
+    steps: [{run: ./deploy.sh}]
+  check:
+    docker: [{image: cimg/base:stable}]
+    steps: [{run: echo ok}]
+workflows:
+  main:
+    jobs:
+      - deploy:
+          name: dry-run
+      - deploy:
+          requires: [dry-run]
+      - check:
+          requires: [deploy, dry-run]
+`
+	var d ir.Diagnostics
+	p, err := Provider{}.Parse([]byte(cfg), &d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	mustJob(t, p, "dry-run")
+	if deploy := mustJob(t, p, "deploy"); !reflect.DeepEqual(deploy.Needs, []string{"dry-run"}) {
+		t.Errorf("deploy needs %v", deploy.Needs)
+	}
+	if check := mustJob(t, p, "check"); !reflect.DeepEqual(check.Needs, []string{"deploy", "dry-run"}) {
+		t.Errorf("check needs %v", check.Needs)
+	}
+	validate(t, emit(t, p))
+}

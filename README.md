@@ -211,9 +211,9 @@ from the live `--help` output.
 ## Development
 
 ```bash
-make test       # unit, round-trip, cross-provider golden, schema and example tests
+make test       # unit, round-trip, cross-provider golden, corpus, schema and example tests
 make lint       # golangci-lint
-make golden     # regenerate golden outputs after an intentional change
+make golden     # regenerate golden outputs and corpus results after an intentional change
 make schemas    # refresh the schema snapshots built into the binary
 make generate   # regenerate the banner, diagram, CLI reference, layout and examples
 ```

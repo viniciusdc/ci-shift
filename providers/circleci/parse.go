@@ -376,7 +376,7 @@ func (ps *parser) parseWorkflows(p *ir.Pipeline) {
 		d.Warnf(wpath+".unless", "workflow conditions are not portable and were dropped")
 	}
 
-	g := &graph{ps: ps, refs: map[string]string{}, taken: map[string]bool{}, approvals: map[string]*entry{}}
+	g := &graph{ps: ps, refs: map[string]string{}, keyAlias: map[string]bool{}, taken: map[string]bool{}, approvals: map[string]*entry{}}
 	mainEntries := g.entries(main.name, main.node)
 	filters := map[string]jobFilter{}
 	for _, e := range mainEntries {
@@ -466,6 +466,7 @@ type entry struct {
 type graph struct {
 	ps        *parser
 	refs      map[string]string // workflow name/alias -> IR ID
+	keyAlias  map[string]bool   // refs that are only a named entry's job key
 	taken     map[string]bool
 	approvals map[string]*entry
 }
@@ -494,7 +495,9 @@ func (g *graph) entries(wfName string, wf *yaml.Node) []*entry {
 				base = e.key
 			}
 		}
-		if id, ok := g.refs[ident]; ok {
+		// A job run under a name is also reachable by its job key, until the
+		// workflow runs the same job without a name: that entry is its own job.
+		if id, ok := g.refs[ident]; ok && !g.keyAlias[ident] {
 			e.id = id
 		} else {
 			if strings.Contains(base, "/") {
@@ -503,9 +506,11 @@ func (g *graph) entries(wfName string, wf *yaml.Node) []*entry {
 			e.id = ir.UniqueID(base, g.taken)
 			e.fresh = true
 			g.refs[ident] = e.id
+			delete(g.keyAlias, ident)
 		}
 		if _, ok := g.refs[e.key]; !ok {
 			g.refs[e.key] = e.id
+			g.keyAlias[e.key] = true
 		}
 		if alias := yamlx.Str(yamlx.Path(e.opts, "matrix", "alias")); alias != "" {
 			g.refs[alias] = e.id

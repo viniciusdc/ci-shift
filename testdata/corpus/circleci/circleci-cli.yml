@@ -1,0 +1,338 @@
+version: 2.1
+
+functions:
+  setup-go: github.com/circleci-functions/setup-go@v0.6.0
+
+commands:
+  setup:
+    steps:
+      - checkout
+      - install-go
+      - install-task
+
+  # Installs the toolchain and restores the module, build and lint caches, saved at job end.
+  install-go:
+    steps:
+      - setup-go:
+          with:
+            version-file: go.mod
+            golangci-lint-cache: true
+            checksum: '{{ checksum "go.sum" }}_{{ checksum "clikit/go.sum" }}_{{ checksum "tools/go.sum" }}'
+      - run: go version
+
+  install-task:
+    steps:
+      - run:
+          name: Install go-task
+          command: |
+            sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b "$HOME/.local/bin"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASH_ENV"
+
+  # GoReleaser's dockers_v2 pipe shells out to `docker buildx build`, so the
+  # builder and the registry login have to exist before it runs.
+  setup-docker:
+    steps:
+      - run:
+          name: Register QEMU for cross-architecture builds
+          # Dockerfile.alpine RUNs `apk add`, once per platform in the manifest,
+          # so building its arm64 half on an amd64 host needs binfmt handlers
+          # registered. Idempotent, and a no-op for the cimg/base image, which
+          # only COPYs.
+          command: docker run --privileged --rm tonistiigi/binfmt --install arm64
+      - run:
+          name: Create a buildx builder
+          # The machine image's default buildx driver is `docker`, which can
+          # neither build for two platforms in one invocation nor push a
+          # manifest list. A docker-container driver can do both.
+          command: docker buildx create --use --driver docker-container
+      - run:
+          name: Log in to Docker Hub
+          # Absent on branch dry-runs, which have no context: the snapshot build
+          # still exercises the Dockerfile, it just pushes nothing.
+          command: |
+            if [ -z "${DOCKER_HUB_USERNAME:-}" ]; then
+              echo "No Docker Hub credentials — skipping login (snapshot builds do not push)."
+              exit 0
+            fi
+            echo "$DOCKER_HUB_PASSWORD" | docker login --username "$DOCKER_HUB_USERNAME" --password-stdin
+
+  store_results:
+    steps:
+      - store_test_results:
+          path: ./test-reports
+
+executors:
+  linux:
+    machine:
+      image: ubuntu-2604:current
+    resource_class: large.gen3
+
+  # Arm64 counterpart to `linux`, for checking both halves of a multi-arch
+  # image. Deliberately small: it only pulls and runs a container.
+  linux-arm:
+    machine:
+      image: ubuntu-2604:current
+    resource_class: arm.medium
+
+  macos:
+    macos:
+      xcode: 26.5.0
+
+  windows:
+    machine: true
+    resource_class: windows.medium
+
+jobs:
+  check:
+    executor: linux
+    steps:
+      - setup
+      - run: task ci:check
+      - store_results
+
+  test:
+    parameters:
+      executor:
+        type: executor
+    executor: << parameters.executor >>
+    steps:
+      - setup
+      - run: task ci:test
+      - store_results
+
+  deploy:
+    executor: linux
+    parameters:
+      # Run before anything is installed, so a push with nothing to release
+      # stops cheaply.
+      gate_steps:
+        type: steps
+        default: []
+      publish_steps:
+        type: steps
+        default:
+          - run: task ci:release
+    steps:
+      - setup
+      - steps: << parameters.gate_steps >>
+      - setup-docker
+      - run: sudo apt update --yes
+      - run:
+          name: Install snapcraft
+          command: |
+            sudo apt install snapd --yes
+            sudo snap install snapcraft --classic
+      - run:
+          name: Install choco
+          command: |
+            sudo cp tools/choco.sh /usr/local/bin/choco
+            sudo chmod +x /usr/local/bin/choco
+            choco help
+      - steps: << parameters.publish_steps >>
+      - store_artifacts:
+          path: dist
+
+  smoke-test:
+    parameters:
+      executor:
+        type: executor
+      install-steps:
+        type: steps
+    executor: << parameters.executor >>
+    steps:
+      - steps: << parameters.install-steps >>
+      - run:
+          name: Verify circleci binary
+          command: circleci version
+
+  # Matrixed over the executors rather than over the tags: only the architecture
+  # needs a machine of its own, so each job checks both variants. Printing the
+  # arch inside the container makes the log say which half of the manifest ran. A
+  # tag missing this platform fails here anyway — the arm machine images carry no
+  # binfmt, so there is nothing to silently emulate an amd64-only image with.
+  smoke-test-docker:
+    parameters:
+      executor:
+        type: executor
+    executor: << parameters.executor >>
+    steps:
+      - run:
+          name: Verify circleci/circleci-cli:v1
+          command: docker run --rm circleci/circleci-cli:v1 sh -c 'uname -m; circleci version'
+      - run:
+          name: Verify circleci/circleci-cli:v1-alpine
+          command: docker run --rm circleci/circleci-cli:v1-alpine sh -c 'uname -m; circleci version'
+
+  # Opens or updates the release PR (see RELEASE.md).
+  release-pr:
+    executor: linux
+    steps:
+      - setup
+      - run: task ci:release-pr
+
+  docs:
+    executor: linux
+    steps:
+      - setup
+      - run:
+          name: Generate reference and build the site
+          command: task docs:build
+      - run:
+          name: Check internal links
+          command: task docs:test
+      - store_artifacts:
+          path: docs/website/public
+      - persist_to_workspace:
+          root: .
+          paths:
+            - "docs/website/public"
+
+  docs-publish:
+    executor: linux
+    steps:
+      - setup
+      - attach_workspace:
+          at: .
+      - run:
+          name: Publish to gh-pages
+          command: task ci:docs:publish
+
+  ok-to-deploy:
+    type: no-op
+
+workflows:
+  ci:
+    jobs:
+      # gh-pages holds only generated HTML — never run CI on it. Entry jobs (no
+      # `requires`) must opt out explicitly; downstream jobs are gated by these.
+
+      - check:
+          filters:
+            branches:
+              ignore: gh-pages
+
+      - test:
+          matrix:
+            parameters:
+              executor:
+                - linux
+                - macos
+                - windows
+          filters:
+            branches:
+              ignore: gh-pages
+
+      - docs:
+          filters:
+            branches:
+              ignore: gh-pages
+
+      - deploy:
+          name: dry-run
+          publish_steps:
+            - run: task ci:build
+          filters:
+            branches:
+              ignore:
+                - main
+                - gh-pages
+
+      - ok-to-deploy:
+          requires:
+            - check
+            - test
+            - docs
+          filters:
+            branches:
+              only: main
+
+      - release-pr:
+          # One at a time, so two pushes can't race to rewrite release/next.
+          serial-group: << pipeline.project.slug >>/release-pr
+          requires:
+            - ok-to-deploy
+          context:
+            - devex-release
+
+      # Publishes only on the push that merges the release PR; halts otherwise.
+      - deploy:
+          serial-group: << pipeline.project.slug >>/deploy
+          gate_steps:
+            - run:
+                name: Halt unless the release is unpublished
+                command: task ci:halt-unless-unreleased
+          requires:
+            - ok-to-deploy
+          context:
+            - devex-release
+            - macos-codesigning
+
+      - docs-publish:
+          serial-group: << pipeline.project.slug >>/docs-publish
+          requires:
+            - ok-to-deploy
+          context:
+            - devex-release
+
+      - smoke-test:
+          name: smoke-test-snap
+          executor: linux
+          install-steps:
+            - run:
+                name: Install snapd
+                command: sudo apt update --yes && sudo apt install snapd --yes
+            - run:
+                name: Install circleci via Snap stable channel
+                # /snap/bin has to be prepended, not just present: the machine
+                # image ships its own circleci in /usr/local/bin, which would
+                # otherwise shadow the snap and make this job verify the build
+                # agent's CLI instead of the release.
+                command: |
+                  sudo snap install circleci
+                  echo 'export PATH="/snap/bin:$PATH"' >> "$BASH_ENV"
+          requires:
+            - deploy
+          filters:
+            branches:
+              only: main
+
+      - smoke-test:
+          name: smoke-test-brew
+          executor: macos
+          install-steps:
+            - run:
+                name: Install circleci via Homebrew preview tap
+                command: |
+                  brew update
+                  rm -f /opt/homebrew/bin/circleci
+                  brew install circleci-public/circleci/circleci@next
+          requires:
+            - deploy
+          filters:
+            branches:
+              only: main
+
+      - smoke-test-docker:
+          matrix:
+            parameters:
+              executor:
+                - linux
+                - linux-arm
+          requires:
+            - deploy
+          filters:
+            branches:
+              only: main
+
+      - smoke-test:
+          name: smoke-test-choco
+          executor: windows
+          install-steps:
+            - run:
+                name: Install circleci via Chocolatey
+                command: choco install circleci-cli -y
+          requires:
+            - deploy
+          filters:
+            branches:
+              only: main

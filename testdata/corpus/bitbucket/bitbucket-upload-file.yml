@@ -1,0 +1,82 @@
+image:
+  name: python:3.10
+
+lint: &lint
+  parallel:
+    - step:
+        name: Lint
+        size: 4x
+        runtime:
+          cloud:
+            atlassian-ip-ranges: true
+        script:
+          - pip install -r test/requirements.txt
+          - flake8 --ignore E501,E125
+        services:
+          - docker
+    - step:
+        name: Lint the Dockerfile
+        image: hadolint/hadolint:latest-debian
+        script:
+          - hadolint Dockerfile
+    - step:
+        name: Security Scan
+        script:
+          # Run a security scan for sensitive data.
+          # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+          - pipe: atlassian/git-secrets-scan:3.0.0
+
+
+check-next-release: &check-next-release
+  step:
+    name: Check next release
+    script:
+    - if [ ! -d ".changes/next-release" ]; then echo "Next release file missing, make sure to run 'semversioner add-change'"; exit 1; fi
+
+
+release-dev: &release-dev
+  step:
+    name: Release development version
+    trigger: manual
+    image: python:3.10
+    script:
+      - pip install semversioner
+      - VERSION=$(semversioner current-version).${BITBUCKET_BUILD_NUMBER}-dev
+      - pipe: atlassian/bitbucket-pipe-release:5.8.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          REGISTRY_URL: docker-public.packages.atlassian.com
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          GIT_PUSH: 'false'
+          VERSION: ${VERSION}
+    services:
+      - docker
+
+
+push: &push
+  step:
+    name: Push and Tag
+    image: python:3.10
+    script:
+      - pipe: atlassian/bitbucket-pipe-release:5.8.0
+        variables:
+          REGISTRY_USERNAME: $REGISTRY_USERNAME
+          REGISTRY_PASSWORD: $REGISTRY_PASSWORD
+          IMAGE: docker-public.packages.atlassian.com/bitbucketpipelines/$BITBUCKET_REPO_SLUG
+          DOCKER_BUILD_PLATFORMS: "linux/arm64,linux/amd64"
+          REGISTRY_URL: docker-public.packages.atlassian.com
+    services:
+      - docker
+
+
+pipelines:
+  default:
+  - <<: *lint
+  - <<: *check-next-release
+  - <<: *release-dev
+  branches:
+    master:
+    - <<: *lint
+    - <<: *push

@@ -3,6 +3,7 @@
 package convert
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -110,6 +111,15 @@ func Convert(data []byte, from, to ir.Provider, opts Options) (*Result, error) {
 	p, err := from.Parse(data, &diags)
 	if err != nil {
 		return nil, err
+	}
+	if len(p.Jobs) == 0 {
+		// The jobs usually live where ci-shift does not look, such as an
+		// include; the warnings say where.
+		msg := from.Name() + ": no jobs to convert"
+		for _, w := range diags.Warnings() {
+			msg += "\n  " + w.String()
+		}
+		return nil, errors.New(msg)
 	}
 	if err := p.Validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", from.Name(), err)
