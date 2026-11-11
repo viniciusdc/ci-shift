@@ -1,9 +1,24 @@
 name: Release
 
+# A version tag publishes the release. A pull request that changes how a
+# release is built, or a manual run, rehearses it with the same steps:
+# GoReleaser builds every archive with --snapshot and publishes nothing, so
+# a broken release setup fails on the pull request instead of on the tag.
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - .goreleaser.yaml
+      - .github/workflows/release.yaml
+      - go.mod
+      - go.sum
+  workflow_dispatch:
 
+# Publishing needs contents: write, and permissions cannot depend on the
+# event. A rehearsal never hands the token to a step: checkout does not keep
+# it, and GoReleaser only receives it when publishing. Pull requests from
+# forks get a read-only token anyway.
 permissions:
   contents: write
 
@@ -14,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Release with the newest Go and its security fixes; go.mod only sets
       # the oldest Go that builds ci-shift. go-licenses, run by GoReleaser,
@@ -29,6 +45,17 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
-          args: release --clean
+          args: ${{ github.event_name == 'push' && 'release --clean' || 'release --snapshot --clean' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.event_name == 'push' && secrets.GITHUB_TOKEN || '' }}
+
+      - name: Check the rehearsal build
+        if: github.event_name != 'push'
+        run: |
+          ls -l dist/*.tar.gz dist/*.zip
+          version="$(dist/cishift_linux_amd64_v1/cishift version)"
+          echo "$version"
+          case "$version" in
+            "cishift v"*) ;;
+            *) echo "unexpected version output"; exit 1 ;;
+          esac
