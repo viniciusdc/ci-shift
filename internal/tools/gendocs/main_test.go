@@ -109,12 +109,76 @@ func TestSynopsis(t *testing.T) {
 		"Command tool converts files.":                  "tool converts files",
 	}
 	for in, want := range cases {
-		pkg := "store"
-		if strings.HasPrefix(in, "Package main") || strings.HasPrefix(in, "Command") {
-			pkg = "main"
-		}
-		if got := synopsis(in, pkg); got != want {
+		if got := synopsis(in); got != want {
 			t.Errorf("synopsis(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGenCommands(t *testing.T) {
+	update := &cmdNode{path: []string{"schemas", "update"}, short: "Download | refresh"}
+	tree := &cmdNode{
+		help: helpData{
+			usages: []string{"tool <file> [flags]"},
+			flags:  []string{"-o, --output string   output file", "-q, --quiet   say less"},
+		},
+		subs: []*cmdNode{
+			{path: []string{"check"}, short: "Check files", help: helpData{global: []string{"-q, --quiet   say less"}}},
+			{path: []string{"schemas"}, short: "Show schemas", subs: []*cmdNode{update}},
+		},
+	}
+	want := "```sh\ntool <file> [-o/--output OUTPUT]\n```\n\n" +
+		"Flags: `-o/--output OUTPUT`\n\n" +
+		"Global flags, accepted by every command: `-q/--quiet`\n\n" +
+		"| Command | Description |\n|---------|-------------|\n" +
+		"| [`tool check`](docs/CLI.md#tool-check) | Check files |\n" +
+		"| [`tool schemas`](docs/CLI.md#tool-schemas) | Show schemas |\n" +
+		"| [`tool schemas update`](docs/CLI.md#tool-schemas-update) | Download \\| refresh |\n\n" +
+		"Every flag and example: [docs/CLI.md](docs/CLI.md)."
+	if got := genCommands(tree, "tool", "docs/CLI.md"); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if got := genCommands(tree, "tool", ""); strings.Contains(got, "](") {
+		t.Errorf("no links without a reference file:\n%s", got)
+	}
+	if len(tree.help.flags) != 2 {
+		t.Errorf("genCommands changed the tree's flags: %q", tree.help.flags)
+	}
+}
+
+func TestParseMakefile(t *testing.T) {
+	src := "BIN = tool\nGOBIN := $(shell go env GOPATH)/bin\nexport PATH := $(GOBIN):$(PATH)\n" +
+		".PHONY: all build test\n\n" +
+		"# The default target.\nall: build\n\n" +
+		"# Build the binary,\n# stamped with the version.\nbuild:\n\tgo build\n\t# not a doc comment\n\n" +
+		"# ── Section banner ──\n\ntest:\n\tgo test ./...\n" +
+		"build:\n\techo again\n"
+	got := parseMakefile(src)
+	want := []makeTarget{
+		{"all", "The default target."},
+		{"build", "Build the binary, stamped with the version."},
+		{"test", ""},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v\nwant %+v", got, want)
+	}
+	table := genMake(got)
+	if !strings.Contains(table, "| `make build` | Build the binary, stamped with the version. |") ||
+		!strings.Contains(table, "| `make test` |  |") {
+		t.Errorf("table:\n%s", table)
+	}
+}
+
+func TestRelLink(t *testing.T) {
+	cases := []struct{ from, to, want string }{
+		{"AGENTS.md", "docs/CLI.md", "docs/CLI.md"},
+		{"docs/guide.md", "docs/CLI.md", "CLI.md"},
+		{"e2e/README.md", "docs/CLI.md", "../docs/CLI.md"},
+		{"AGENTS.md", "", ""},
+	}
+	for _, c := range cases {
+		if got := relLink(c.from, c.to); got != c.want {
+			t.Errorf("relLink(%q, %q) = %q, want %q", c.from, c.to, got, c.want)
 		}
 	}
 }

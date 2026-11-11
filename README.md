@@ -244,6 +244,7 @@ and adding its schema URL to `schema/schema.go`.
 
 <!-- gendocs:layout -->
 ```
+AGENTS.md           Guide for coding agents
 Makefile            Build, test, lint, schema and docs targets
 cmd/                Executable entry points
   cishift/          cishift translates CI/CD pipelines between providers
@@ -263,7 +264,7 @@ internal/           Packages private to this module
   tools/            Maintenance commands, run through make
     genbanner/      Generates the README banner SVGs from docsmith.toml
     gendiagram/     Generates architecture diagram SVGs from TOML definitions
-    gendocs/        Generates the CLI reference and project layout sections of the docs
+    gendocs/        Generates the CLI reference, layout and other doc sections
     genexamples/    Generates executable documentation snippets
     updateschemas/  Refreshes the schema snapshots built into cishift
   yamlx/            yamlx reads and writes YAML documents, keeping the order of keys
