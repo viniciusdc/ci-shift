@@ -801,7 +801,7 @@ func pkgDoc(dir string) string {
 		if err != nil || af.Doc == nil {
 			continue
 		}
-		return synopsis(af.Doc.Text(), af.Name.Name)
+		return synopsis(af.Doc.Text())
 	}
 	return ""
 }
@@ -809,7 +809,7 @@ func pkgDoc(dir string) string {
 // synopsis trims a package comment to its first sentence, drops the
 // conventional "Package" / "Command" prefix, and caps the length, so
 // "Package store provides a database." becomes "store provides a database".
-func synopsis(text, pkg string) string {
+func synopsis(text string) string {
 	joined := strings.Join(strings.Fields(text), " ")
 	if i := strings.Index(joined, ". "); i >= 0 {
 		joined = joined[:i+1]

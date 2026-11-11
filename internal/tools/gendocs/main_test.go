@@ -109,11 +109,7 @@ func TestSynopsis(t *testing.T) {
 		"Command tool converts files.":                  "tool converts files",
 	}
 	for in, want := range cases {
-		pkg := "store"
-		if strings.HasPrefix(in, "Package main") || strings.HasPrefix(in, "Command") {
-			pkg = "main"
-		}
-		if got := synopsis(in, pkg); got != want {
+		if got := synopsis(in); got != want {
 			t.Errorf("synopsis(%q) = %q, want %q", in, got, want)
 		}
 	}
