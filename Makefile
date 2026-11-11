@@ -6,20 +6,26 @@ LDFLAGS = -s -w -X github.com/viniciusdc/ci-shift/internal/buildinfo.version=$(V
 .PHONY: all build clean fmt lint test golden install uninstall install-tools schemas ci \
 	docs banner diagrams examples examples-check generate
 
+# The default target: build.
 all: build
 
+# Build ./cishift, stamped with the version from git describe.
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) ./cmd/cishift
 
+# Remove the built binary.
 clean:
 	rm -f $(BINARY_NAME)
 
+# Format the Go code.
 fmt:
 	gofmt -w .
 
+# Run golangci-lint (make install-tools installs it).
 lint:
 	golangci-lint run ./...
 
+# Run the Go tests, including the golden and README example tests.
 test:
 	go test ./...
 
@@ -27,14 +33,17 @@ test:
 golden:
 	go test ./convert/ -run TestGolden -update
 
+# Build and copy cishift to INSTALL_DIR, ~/.local/bin by default.
 install: build
 	mkdir -p $(INSTALL_DIR)
 	cp $(BINARY_NAME) $(INSTALL_DIR)/
 	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR). Ensure $(INSTALL_DIR) is in your PATH."
 
+# Remove cishift from INSTALL_DIR.
 uninstall:
 	rm -f $(INSTALL_DIR)/$(BINARY_NAME)
 
+# Install golangci-lint, and freeze, which renders the README examples.
 install-tools:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	go install github.com/charmbracelet/freeze@latest
@@ -43,6 +52,7 @@ install-tools:
 schemas:
 	go run ./internal/tools/updateschemas
 
+# Lint, test and build.
 ci: lint test build
 
 # ── Documentation ────────────────────────────────────────────────────────────
@@ -52,15 +62,16 @@ ci: lint test build
 GOBIN := $(shell go env GOPATH)/bin
 export PATH := $(GOBIN):$(PATH)
 
-# CLI reference in docs/CLI.md and the project layout in README.md.
+# The CLI reference in docs/CLI.md, and the layout, command and make target
+# sections of README.md and AGENTS.md.
 docs:
 	go run ./internal/tools/gendocs
 
-# docs/assets/banner-{dark,light}.svg
+# Render docs/assets/banner-{dark,light}.svg from docsmith.toml.
 banner:
 	go run ./internal/tools/genbanner
 
-# docs/assets/diagrams/*.svg from docs/diagrams/*.toml
+# Render docs/assets/diagrams/*.svg from docs/diagrams/*.toml.
 diagrams:
 	go run ./internal/tools/gendiagram
 

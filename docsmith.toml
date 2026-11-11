@@ -36,15 +36,18 @@ width   = 760
 
 # ── Generated docs (internal/tools/gendocs) ──────────────────────────────────
 [docs]
-cli_file    = "docs/CLI.md"
-layout_file = "README.md"
+cli_file       = "docs/CLI.md"
+commands_files = ["AGENTS.md"]
+make_files     = ["AGENTS.md"]
+layout_files   = ["README.md", "AGENTS.md"]
 
 [docs.layout]
-root_files = ["Makefile", "docsmith.toml", "go.mod"]
+root_files = ["AGENTS.md", "Makefile", "docsmith.toml", "go.mod"]
 skip       = ["testdata", "assets", "licenses", "dist", "third_party", "vendor"]
 max_depth  = 3
 
 [docs.layout.annotations]
+"AGENTS.md"        = "Guide for coding agents"
 "Makefile"         = "Build, test, lint, schema and docs targets"
 "docsmith.toml"    = "Configuration for the docs generators"
 "go.mod"           = "Module github.com/viniciusdc/ci-shift"

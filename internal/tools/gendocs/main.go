@@ -1,18 +1,23 @@
-// Package main generates the CLI reference and project layout sections of the
-// docs. It injects them into Markdown files between HTML comment markers:
+// Package main generates the CLI reference, layout and other doc sections.
+// It injects them into Markdown files between HTML comment markers:
 //
 //	<!-- gendocs:NAME --> ... content ... <!-- /gendocs:NAME -->
 //
-// Two sections are produced, both configured in docsmith.toml:
+// Four sections are produced, all configured in docsmith.toml:
 //
 //   - cli: a command reference for the cobra binary built from
 //     [project].main, written to [docs].cli_file. The command tree is
 //     discovered by walking "<bin> --help" recursively, so there is nothing
 //     to keep in sync by hand; hidden commands never show up and the
 //     built-in help and completion commands are skipped.
-//   - layout: a directory tree written to [docs].layout_file, annotated with
-//     the first sentence of each Go package's doc comment, or with an entry
-//     from [docs.layout.annotations].
+//   - commands: a one-table summary of the same tree, linking to the
+//     reference, written to each of [docs].commands_files.
+//   - make: the Makefile's targets with the comment lines directly above
+//     each one, written to each of [docs].make_files. [docs].makefile
+//     names the Makefile, by default the one at the root.
+//   - layout: a directory tree written to each of [docs].layout_files,
+//     annotated with the first sentence of each Go package's doc comment,
+//     or with an entry from [docs.layout.annotations].
 //
 // Run via:
 //
@@ -45,9 +50,12 @@ type config struct {
 		Main   string `toml:"main"`
 	} `toml:"project"`
 	Docs struct {
-		CLIFile    string `toml:"cli_file"`
-		LayoutFile string `toml:"layout_file"`
-		Layout     struct {
+		CLIFile       string   `toml:"cli_file"`
+		CommandsFiles []string `toml:"commands_files"`
+		Makefile      string   `toml:"makefile"`
+		MakeFiles     []string `toml:"make_files"`
+		LayoutFiles   []string `toml:"layout_files"`
+		Layout        struct {
 			RootFiles   []string          `toml:"root_files"`
 			Skip        []string          `toml:"skip"`
 			MaxDepth    int               `toml:"max_depth"`
@@ -66,19 +74,54 @@ func main() {
 		fatalf("%v", err)
 	}
 
-	if cfg.Docs.CLIFile != "" {
+	d := cfg.Docs
+	if d.CLIFile != "" || len(d.CommandsFiles) > 0 {
 		if cfg.Project.Binary == "" || cfg.Project.Main == "" {
-			fatalf("[docs].cli_file needs [project].binary and [project].main")
+			fatalf("[docs].cli_file and [docs].commands_files need [project].binary and [project].main")
 		}
 		bin, cleanup := build(root, cfg.Project.Binary, cfg.Project.Main)
-		cli := genCLI(bin, cfg.Project.Binary)
+		tree := discover(bin, nil, "")
 		cleanup()
-		inject(root, cfg.Docs.CLIFile, "cli", cli)
+		if d.CLIFile != "" {
+			inject(root, d.CLIFile, "cli", genCLI(tree, cfg.Project.Binary))
+		}
+		for _, f := range d.CommandsFiles {
+			inject(root, f, "commands", genCommands(tree, cfg.Project.Binary, relLink(f, d.CLIFile)))
+		}
 	}
-	if cfg.Docs.LayoutFile != "" {
-		l := cfg.Docs.Layout
-		inject(root, cfg.Docs.LayoutFile, "layout", genLayout(root, l.RootFiles, l.Skip, l.MaxDepth, l.Annotations))
+	if len(d.MakeFiles) > 0 {
+		mk := d.Makefile
+		if mk == "" {
+			mk = "Makefile"
+		}
+		src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(mk)))
+		if err != nil {
+			fatalf("read %s: %v", mk, err)
+		}
+		for _, f := range d.MakeFiles {
+			inject(root, f, "make", genMake(parseMakefile(string(src))))
+		}
 	}
+	if len(d.LayoutFiles) > 0 {
+		l := d.Layout
+		layout := genLayout(root, l.RootFiles, l.Skip, l.MaxDepth, l.Annotations)
+		for _, f := range d.LayoutFiles {
+			inject(root, f, "layout", layout)
+		}
+	}
+}
+
+// relLink returns the link from the Markdown file from to the file to, both
+// relative to the root, or "" when to is empty.
+func relLink(from, to string) string {
+	if to == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(filepath.Dir(filepath.FromSlash(from)), filepath.FromSlash(to))
+	if err != nil {
+		return to
+	}
+	return filepath.ToSlash(rel)
 }
 
 // inject replaces the content between the <!-- gendocs:name --> and
@@ -405,15 +448,10 @@ func writeFlagsTable(b *bytes.Buffer, flags []flagInfo) {
 	b.WriteByte('\n')
 }
 
-// genCLI renders the reference: the root command first, then one section per
-// top-level command. A command with subcommands gets a summary table
-// followed by a subsection for each leaf.
-func genCLI(bin, name string) string {
-	tree := discover(bin, nil, "")
-	var b bytes.Buffer
-
-	// Persistent flags show up as "Global Flags" on any subcommand; the root
-	// lists them among its own flags, so they are split out there.
+// splitGlobal returns the root command with only its own flags, and the
+// persistent flags. Those show up as "Global Flags" on any subcommand, while
+// the root lists them among its own flags.
+func splitGlobal(tree *cmdNode) (*cmdNode, []flagInfo) {
 	var global []flagInfo
 	if len(tree.subs) > 0 {
 		global = parseFlagLines(tree.subs[0].help.global)
@@ -422,20 +460,29 @@ func genCLI(bin, name string) string {
 	for _, g := range global {
 		isGlobal[g.display] = true
 	}
-	var rootFlags []string
+	root := *tree
+	root.help.flags = nil
 	for _, line := range tree.help.flags {
 		if f := parseFlagLines([]string{line}); len(f) == 1 && !isGlobal[f[0].display] {
-			rootFlags = append(rootFlags, line)
+			root.help.flags = append(root.help.flags, line)
 		}
 	}
-	tree.help.flags = rootFlags
+	return &root, global
+}
+
+// genCLI renders the reference: the root command first, then one section per
+// top-level command. A command with subcommands gets a summary table
+// followed by a subsection for each leaf.
+func genCLI(tree *cmdNode, name string) string {
+	var b bytes.Buffer
+	tree, global := splitGlobal(tree)
 
 	// Root command.
 	if tree.help.long != "" {
 		b.WriteString(tree.help.long + "\n\n")
 	}
 	writeUsage(&b, tree)
-	writeFlagsTable(&b, parseFlagLines(rootFlags))
+	writeFlagsTable(&b, parseFlagLines(tree.help.flags))
 	if tree.help.examples != "" {
 		fmt.Fprintf(&b, "```sh\n%s\n```\n\n", tree.help.examples)
 	}
@@ -554,6 +601,94 @@ func anchor(name string, path []string) string {
 		}
 	}
 	return b.String()
+}
+
+// genCommands renders the summary: the root usage and flags, then a row for
+// every command, linked to its section of the reference at cliLink (no
+// links when cliLink is "").
+func genCommands(tree *cmdNode, name, cliLink string) string {
+	var b bytes.Buffer
+	tree, global := splitGlobal(tree)
+	writeUsage(&b, tree)
+	writeFlagNames(&b, "Flags:", parseFlagLines(tree.help.flags))
+	writeFlagNames(&b, "Global flags, accepted by every command:", global)
+
+	var rows []*cmdNode
+	var walk func(n *cmdNode)
+	walk = func(n *cmdNode) {
+		for _, s := range n.subs {
+			rows = append(rows, s)
+			walk(s)
+		}
+	}
+	walk(tree)
+	if len(rows) > 0 {
+		b.WriteString("| Command | Description |\n|---------|-------------|\n")
+		for _, n := range rows {
+			cmd := "`" + name + " " + strings.Join(n.path, " ") + "`"
+			if cliLink != "" {
+				cmd = fmt.Sprintf("[%s](%s#%s)", cmd, cliLink, anchor(name, n.path))
+			}
+			fmt.Fprintf(&b, "| %s | %s |\n", cmd, escapeCell(n.short))
+		}
+		b.WriteString("\n")
+	}
+	if cliLink != "" {
+		fmt.Fprintf(&b, "Every flag and example: [%s](%s).\n", cliLink, cliLink)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeFlagNames writes label and the flag names on one line, or nothing
+// when there are no flags.
+func writeFlagNames(b *bytes.Buffer, label string, flags []flagInfo) {
+	if len(flags) == 0 {
+		return
+	}
+	b.WriteString(label)
+	for _, f := range flags {
+		b.WriteString(" " + f.display)
+	}
+	b.WriteString("\n\n")
+}
+
+// makeTarget is one Makefile target and the comment directly above it.
+type makeTarget struct{ name, doc string }
+
+// makeTargetRE matches a rule's first line, "name:" or "name: prereqs", but
+// not an assignment such as "name := value".
+var makeTargetRE = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*:([^=]|$)`)
+
+// parseMakefile lists a Makefile's targets in order, each with the comment
+// lines directly above it joined into one line. Special targets such as
+// .PHONY, assignments and recipes are skipped.
+func parseMakefile(src string) []makeTarget {
+	var out []makeTarget
+	var doc []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(src, "\n") {
+		if c, ok := strings.CutPrefix(line, "#"); ok {
+			doc = append(doc, strings.TrimSpace(c))
+			continue
+		}
+		if m := makeTargetRE.FindStringSubmatch(line); m != nil && !seen[m[1]] {
+			seen[m[1]] = true
+			out = append(out, makeTarget{m[1], strings.Join(doc, " ")})
+		}
+		doc = nil
+	}
+	return out
+}
+
+// genMake renders the targets as a table; a target without a comment gets an
+// empty description.
+func genMake(targets []makeTarget) string {
+	var b bytes.Buffer
+	b.WriteString("| Target | Description |\n|--------|-------------|\n")
+	for _, t := range targets {
+		fmt.Fprintf(&b, "| `make %s` | %s |\n", t.name, escapeCell(t.doc))
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // defaultSkip applies when [docs.layout].skip is not set.
